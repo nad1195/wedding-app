@@ -13,7 +13,7 @@
     body { font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif; background: #fdf2f4; }
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-    .safe-pb { padding-bottom: calc(4rem + env(safe-area-inset-bottom)); }
+    .safe-pb { padding-bottom: calc(4.5rem + env(safe-area-inset-bottom)); }
     .safe-nav { padding-bottom: env(safe-area-inset-bottom); }
   </style>
 </head>
@@ -21,27 +21,51 @@
 <div id="root"></div>
 
 <script type="text/babel">
-const { useState, useEffect, useCallback, useRef } = React;
+const { useState, useEffect, useCallback } = React;
 
-// ── 설정 ──────────────────────────────────────────────────────
-const WEDDING_DATE  = new Date('2027-05-23T15:40:00+09:00');
-const TOTAL_BUDGET  = 80_000_000;
-const VENDOR_TABS   = ['📸 본식스냅','🎬 본식영상','👗 드레스','💄 메이크업','📷 스튜디오 (스드메)'];
-const KEY_DATES     = [
+// ── 상수 ──────────────────────────────────────────────────────
+const WEDDING_DATE = new Date('2027-05-23T15:40:00+09:00');
+const TOTAL_BUDGET = 80_000_000;
+const VENDOR_TABS  = ['📸 본식스냅','🎬 본식영상','👗 드레스','💄 메이크업','📷 스튜디오 (스드메)'];
+const KEY_DATES    = [
   { label:'세례식',   date:'2026-11-01', icon:'⛪' },
   { label:'혼인교리', date:'2026-11-28', icon:'📖' },
-  { label:'상견례',   date:'2026-07-31', icon:'👨‍👩‍👧' },
-  { label:'신혼여행', date:'2027-05-24', icon:'✈️' },
+  { label:'상견례',   date:null,          icon:'👨‍👩‍👧' },
+  { label:'신혼여행', date:'2027-05-24',  icon:'✈️' },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────
 function daysUntil(d) {
+  if (!d) return null;
   const now = new Date(); now.setHours(0,0,0,0);
   const t   = new Date(d); t.setHours(0,0,0,0);
   return Math.round((t - now) / 86400000);
 }
 function fmt(n) { return Number(n||0).toLocaleString('ko-KR'); }
 function today() { return new Date().toISOString().split('T')[0]; }
+
+// URL 자동 파싱
+function parseUrl(url) {
+  try {
+    const u = (url || '').trim();
+    if (!u.startsWith('http')) return { name: u, source: '기타', icon: '🔗' };
+    const ig = u.match(/instagram\.com\/([^\/\?\s#&]+)/);
+    if (ig && !['p','reel','stories','explore','tv'].includes(ig[1])) {
+      return { name: '@' + ig[1], source: '인스타', icon: '📸' };
+    }
+    if (u.includes('hogangnono.com')) {
+      const hg = u.match(/\/apt\/([^\/\?\s]+)/);
+      return { name: hg ? '단지 #' + hg[1] : '호갱노노 링크', source: '호갱노노', icon: '🏘️' };
+    }
+    if (u.includes('land.naver.com')) return { name: '네이버 부동산 링크', source: '네이버', icon: '🏠' };
+    if (u.includes('zigbang.com'))    return { name: '직방 링크', source: '직방', icon: '🏠' };
+    if (u.includes('dabangapp.com'))  return { name: '다방 링크', source: '다방', icon: '🏠' };
+    const host = new URL(u).hostname.replace('www.', '');
+    return { name: host, source: host, icon: '🔗' };
+  } catch(e) {
+    return { name: url || '', source: '기타', icon: '🔗' };
+  }
+}
 
 // ── API ───────────────────────────────────────────────────────
 function makeApi(baseUrl) {
@@ -51,29 +75,36 @@ function makeApi(baseUrl) {
     try {
       const res = await fetch(url, { redirect: 'follow' });
       return await res.json();
-    } catch (e) {
-      console.error('API error:', e);
-      return { error: e.message };
-    }
+    } catch(e) { return { error: e.message }; }
   };
+}
+
+// ── 현재 준비 단계 ────────────────────────────────────────────
+function getPhase() {
+  const now = new Date();
+  if (now < new Date('2026-05-23')) return { label:'결혼식 1년 이상 前', color:'bg-red-100 text-red-700',      hint:'⚡ 스냅·스드메·예물 지금 알아볼 때!' };
+  if (now < new Date('2026-07-23')) return { label:'결혼식 1년 前 구간',  color:'bg-orange-100 text-orange-700', hint:'🔥 스냅·스드메 계약 마감 임박!' };
+  if (now < new Date('2026-11-23')) return { label:'결혼식 10개월 前',    color:'bg-yellow-100 text-yellow-700', hint:'드레스투어 · 신혼여행 예약' };
+  if (now < new Date('2027-02-23')) return { label:'결혼식 6개월 前',     color:'bg-blue-100 text-blue-700',    hint:'청첩장 · 신혼집 계약' };
+  if (now < new Date('2027-04-23')) return { label:'결혼식 3개월 前',     color:'bg-purple-100 text-purple-700', hint:'사회자·부케·최종 미팅' };
+  return                                   { label:'결혼식 1개월 前 이내', color:'bg-rose-100 text-rose-700',   hint:'🚨 최종 준비 단계!' };
 }
 
 // ══════════════════════════════════════════════════════════════
 // SETUP SCREEN
 // ══════════════════════════════════════════════════════════════
 function SetupScreen({ onSave }) {
-  const [url, setUrl] = useState('');
+  const [url, setUrl]       = useState('');
   const [testing, setTesting] = useState(false);
-  const [err, setErr] = useState('');
+  const [err, setErr]       = useState('');
 
   async function test() {
     setTesting(true); setErr('');
     try {
-      const api = makeApi(url);
-      const res = await api('ping');
-      if (res.status === 'ok') { onSave(url); }
-      else { setErr('연결 실패: ' + (res.error || JSON.stringify(res))); }
-    } catch (e) { setErr('연결 실패: ' + e.message); }
+      const res = await makeApi(url.trim())('ping');
+      if (res.status === 'ok') onSave(url.trim());
+      else setErr('연결 실패: ' + (res.error || JSON.stringify(res)));
+    } catch(e) { setErr('연결 실패: ' + e.message); }
     finally { setTesting(false); }
   }
 
@@ -85,7 +116,6 @@ function SetupScreen({ onSave }) {
           <h1 className="text-2xl font-bold text-gray-800">처음 설정</h1>
           <p className="text-gray-500 text-sm mt-2">Google Apps Script 웹 앱 URL을 붙여넣으세요</p>
         </div>
-
         <div className="bg-rose-50 rounded-xl p-4 mb-5 text-xs text-rose-700 space-y-1">
           <p className="font-semibold">📋 Apps Script 배포 순서:</p>
           <p>1. 구글시트 → 확장 프로그램 → Apps Script</p>
@@ -94,22 +124,12 @@ function SetupScreen({ onSave }) {
           <p>4. 실행: <b>나(본인)</b> / 액세스: <b>모든 사용자</b></p>
           <p>5. URL 복사 후 아래에 붙여넣기</p>
         </div>
-
-        <textarea
-          className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-rose-400 transition-colors resize-none"
-          rows={3}
-          placeholder="https://script.google.com/macros/s/...exec"
-          value={url}
-          onChange={e => setUrl(e.target.value.trim())}
-        />
-
+        <textarea className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-rose-400 resize-none"
+          rows={3} placeholder="https://script.google.com/macros/s/...exec"
+          value={url} onChange={e => setUrl(e.target.value)} />
         {err && <p className="text-red-500 text-xs mt-2">{err}</p>}
-
-        <button
-          onClick={test}
-          disabled={!url || testing}
-          className="w-full mt-4 bg-gradient-to-r from-rose-500 to-pink-500 text-white rounded-xl py-3.5 font-bold text-base shadow-lg disabled:opacity-40 transition-opacity"
-        >
+        <button onClick={test} disabled={!url || testing}
+          className="w-full mt-4 bg-gradient-to-r from-rose-500 to-pink-500 text-white rounded-xl py-3.5 font-bold text-base shadow-lg disabled:opacity-40">
           {testing ? '연결 확인 중...' : '연결 & 시작하기 💕'}
         </button>
       </div>
@@ -118,54 +138,33 @@ function SetupScreen({ onSave }) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// COMPONENTS
+// SHARED COMPONENTS
 // ══════════════════════════════════════════════════════════════
 function Card({ children, className = '' }) {
   return <div className={`bg-white rounded-2xl shadow-sm p-4 ${className}`}>{children}</div>;
 }
-
-function StatusBadge({ status }) {
-  const map = {
-    '✅ 완료':  'bg-emerald-100 text-emerald-700',
-    '⏳ 진행중':'bg-amber-100 text-amber-700',
-    '🔲 미시작':'bg-gray-100 text-gray-500',
-  };
-  const s = String(status || '');
-  const cls = map[s] || 'bg-gray-100 text-gray-500';
-  return <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cls}`}>{s.replace(/[✅⏳🔲]/g,'').trim()}</span>;
-}
-
 function ProgressBar({ value, max, className = '' }) {
   const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
   return (
     <div className={`h-2 bg-gray-100 rounded-full overflow-hidden ${className}`}>
-      <div
-        className="h-full bg-gradient-to-r from-rose-400 to-pink-400 rounded-full transition-all duration-500"
-        style={{ width: `${pct}%` }}
-      />
+      <div className="h-full bg-gradient-to-r from-rose-400 to-pink-400 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
     </div>
   );
 }
-
-// ── PHASE 계산 ────────────────────────────────────────────────
-function getPhase() {
-  const now = new Date();
-  if (now < new Date('2026-05-23')) return { label:'결혼식 1년 이상 前', color:'bg-red-100 text-red-700',    hint:'⚡ 스냅/스드메/예물 지금 알아볼 때!' };
-  if (now < new Date('2026-07-23')) return { label:'결혼식 1년 前 구간',   color:'bg-orange-100 text-orange-700', hint:'🔥 스냅·스드메 계약 마감 임박!' };
-  if (now < new Date('2026-11-23')) return { label:'결혼식 10개월 前',     color:'bg-yellow-100 text-yellow-700', hint:'드레스투어 · 신혼여행 예약' };
-  if (now < new Date('2027-02-23')) return { label:'결혼식 6개월 前',      color:'bg-blue-100 text-blue-700',    hint:'청첩장 · 신혼집 계약' };
-  if (now < new Date('2027-04-23')) return { label:'결혼식 3개월 前',      color:'bg-purple-100 text-purple-700', hint:'사회자·부케·최종 미팅' };
-  return                                  { label:'결혼식 1개월 前 이내',   color:'bg-rose-100 text-rose-700',    hint:'🚨 최종 준비 단계!' };
+function StatusBadge({ status }) {
+  const map = { '✅ 완료':'bg-emerald-100 text-emerald-700','⏳ 진행중':'bg-amber-100 text-amber-700','🔲 미시작':'bg-gray-100 text-gray-500' };
+  const s = String(status || '');
+  return <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${map[s]||'bg-gray-100 text-gray-500'}`}>{s.replace(/[✅⏳🔲]/g,'').trim()}</span>;
 }
 
 // ══════════════════════════════════════════════════════════════
-// PAGE: HOME
+// PAGE: 요약
 // ══════════════════════════════════════════════════════════════
-function HomePage({ todos, expenses }) {
-  const dday = daysUntil(WEDDING_DATE);
+function SummaryPage({ todos, expenses }) {
+  const dday  = daysUntil(WEDDING_DATE);
   const phase = getPhase();
-  const urgent = todos.filter(t => t.status !== '✅ 완료' && t.priority === '🔴 높음').slice(0, 5);
-  const totalSpent = expenses.reduce((s, e) => s + (e.amount || 0), 0);
+  const urgent = todos.filter(t => t.status !== '✅ 완료' && t.priority === '🔴 높음').slice(0,5);
+  const totalSpent = expenses.reduce((s,e) => s + (e.amount||0), 0);
   const done = todos.filter(t => t.status === '✅ 완료').length;
 
   return (
@@ -204,7 +203,7 @@ function HomePage({ todos, expenses }) {
 
       {/* Key dates */}
       <div>
-        <p className="font-bold text-gray-700 mb-2 px-1">📅 주요 일정 D-Day</p>
+        <p className="font-bold text-gray-700 mb-2 px-1">📅 주요 일정</p>
         <div className="grid grid-cols-2 gap-2">
           {KEY_DATES.map(kd => {
             const d = daysUntil(kd.date);
@@ -214,49 +213,177 @@ function HomePage({ todos, expenses }) {
                   <span className="text-base">{kd.icon}</span>
                   <span className="text-xs font-medium text-gray-500">{kd.label}</span>
                 </div>
-                <p className="text-2xl font-black text-rose-500">D-{d}</p>
-                <p className="text-xs text-gray-400">{kd.date}</p>
+                {d !== null
+                  ? <><p className="text-2xl font-black text-rose-500">D-{d}</p><p className="text-xs text-gray-400">{kd.date}</p></>
+                  : <p className="text-sm font-bold text-gray-400 mt-1">미정</p>
+                }
               </Card>
             );
           })}
         </div>
       </div>
 
-      {/* Urgent todos */}
+      {/* 급한 할일 */}
+      {urgent.length > 0 && (
+        <div>
+          <p className="font-bold text-gray-700 mb-2 px-1">🚨 지금 당장 해야할 일</p>
+          <div className="space-y-2">
+            {urgent.map((t,i) => (
+              <Card key={i} className="flex items-center gap-3 py-3">
+                <span className="text-xl flex-shrink-0">🔴</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-800 truncate">{t.title}</p>
+                  <p className="text-xs text-gray-400">{t.deadline} · {t.assignee}</p>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// PAGE: 결혼식
+// ══════════════════════════════════════════════════════════════
+function WeddingPage({ todos }) {
+  const krTodos = todos.filter(t => t.category === '한국결혼식');
+  const idTodos = todos.filter(t => t.category === '인도네시아결혼식');
+  const krDone  = krTodos.filter(t => t.status === '✅ 완료').length;
+  const idDone  = idTodos.filter(t => t.status === '✅ 완료').length;
+
+  return (
+    <div className="space-y-5">
+      {/* 🇰🇷 한국 결혼식 */}
       <div>
-        <p className="font-bold text-gray-700 mb-2 px-1">🚨 지금 당장 해야할 일</p>
-        {urgent.length === 0
-          ? <Card><p className="text-center text-gray-400 text-sm py-2">🎉 급한 일이 없어요!</p></Card>
-          : <div className="space-y-2">
-              {urgent.map((t, i) => (
-                <Card key={i} className="flex items-center gap-3 py-3">
-                  <span className="text-xl flex-shrink-0">🔴</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-800 truncate">{t.title}</p>
-                    <p className="text-xs text-gray-400">{t.deadline} · {t.assignee}</p>
+        <div className="flex items-center gap-2 mb-3 px-1">
+          <span className="text-2xl">🇰🇷</span>
+          <p className="font-black text-gray-800 text-lg">한국 결혼식</p>
+        </div>
+        <Card className="mb-3">
+          <div className="space-y-3">
+            <div className="flex items-start gap-3">
+              <span className="text-lg mt-0.5">📅</span>
+              <div>
+                <p className="text-xs text-gray-400 font-medium">날짜·시간</p>
+                <p className="font-bold text-gray-800">2027년 5월 23일 (일)</p>
+                <p className="text-sm text-rose-500 font-semibold">오후 3시 40분</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <span className="text-lg mt-0.5">💒</span>
+              <div>
+                <p className="text-xs text-gray-400 font-medium">장소</p>
+                <p className="font-bold text-gray-800">라마다 신도림 호텔</p>
+                <p className="text-sm text-gray-500">하늘정원홀</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <span className="text-lg mt-0.5">✅</span>
+              <div>
+                <p className="text-xs text-gray-400 font-medium">계약 상태</p>
+                <p className="font-bold text-emerald-600">계약 완료</p>
+                <p className="text-xs text-gray-400 mt-0.5">계약금 500만원 납부 완료</p>
+              </div>
+            </div>
+            {krTodos.length > 0 && (
+              <div className="flex items-start gap-3">
+                <span className="text-lg mt-0.5">📋</span>
+                <div className="flex-1">
+                  <p className="text-xs text-gray-400 font-medium">준비 진행률</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <ProgressBar value={krDone} max={krTodos.length} className="flex-1" />
+                    <span className="text-xs font-bold text-rose-500">{krDone}/{krTodos.length}</span>
                   </div>
-                </Card>
+                </div>
+              </div>
+            )}
+          </div>
+        </Card>
+
+        {/* 한국 결혼식 할일 (미완료) */}
+        {krTodos.filter(t => t.status !== '✅ 완료').slice(0,5).map((t,i) => (
+          <Card key={i} className={`mb-2 py-3 border-l-4 ${t.priority === '🔴 높음' ? 'border-rose-400' : 'border-gray-200'}`}>
+            <div className="flex items-center gap-2">
+              <span className="text-base">{t.priority === '🔴 높음' ? '🔴' : '⬜'}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-gray-800 truncate">{t.title}</p>
+                <p className="text-xs text-gray-400">{t.deadline} · {t.assignee}</p>
+              </div>
+            </div>
+          </Card>
+        ))}
+      </div>
+
+      {/* 🇮🇩 인도네시아 결혼식 */}
+      <div>
+        <div className="flex items-center gap-2 mb-3 px-1">
+          <span className="text-2xl">🇮🇩</span>
+          <p className="font-black text-gray-800 text-lg">인도네시아 결혼식</p>
+        </div>
+        <Card className="mb-3">
+          <div className="space-y-3">
+            <div className="flex items-start gap-3">
+              <span className="text-lg mt-0.5">📅</span>
+              <div>
+                <p className="text-xs text-gray-400 font-medium">날짜·시간</p>
+                <p className="font-bold text-gray-500">미정</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <span className="text-lg mt-0.5">⛪</span>
+              <div>
+                <p className="text-xs text-gray-400 font-medium">장소</p>
+                <p className="font-bold text-gray-800">천주교 성당 (미정)</p>
+                <p className="text-sm text-gray-500">인도네시아</p>
+              </div>
+            </div>
+            <div className="bg-amber-50 rounded-xl p-3">
+              <p className="text-xs font-bold text-amber-700 mb-2">📌 진행 순서</p>
+              {[
+                { done:false, text:'진혁 세례', date:'2026-11-01' },
+                { done:false, text:'혼인교리 수강 (세례 후)' },
+                { done:false, text:'인도네시아 성당 섭외' },
+                { done:false, text:'인도네시아 결혼식 날짜 확정' },
+              ].map((s,i) => (
+                <div key={i} className="flex items-center gap-2 mb-1.5">
+                  <span className="text-sm">{s.done ? '✅' : '⬜'}</span>
+                  <span className="text-xs text-amber-800 flex-1">{s.text}</span>
+                  {s.date && <span className="text-xs text-amber-500">{s.date}</span>}
+                </div>
               ))}
             </div>
-        }
+            {idTodos.length > 0 && (
+              <div className="flex items-start gap-3">
+                <span className="text-lg mt-0.5">📋</span>
+                <div className="flex-1">
+                  <p className="text-xs text-gray-400 font-medium">준비 진행률</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <ProgressBar value={idDone} max={idTodos.length} className="flex-1" />
+                    <span className="text-xs font-bold text-rose-500">{idDone}/{idTodos.length}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </Card>
       </div>
     </div>
   );
 }
 
 // ══════════════════════════════════════════════════════════════
-// PAGE: TODOS
+// PAGE: 할일
 // ══════════════════════════════════════════════════════════════
 function TodoPage({ todos, onToggle }) {
   const [cat, setCat] = useState('전체');
   const cats = ['전체','한국결혼식','종교/교리','상견례','신혼집','인도네시아결혼식','신혼여행','기타'];
-
   const filtered = cat === '전체' ? todos : todos.filter(t => t.category === cat);
   const done = todos.filter(t => t.status === '✅ 완료').length;
 
   return (
     <div>
-      {/* Progress summary */}
       <Card className="mb-4">
         <div className="flex justify-between items-center mb-2">
           <span className="text-sm font-semibold text-gray-700">전체 진행률</span>
@@ -265,7 +392,6 @@ function TodoPage({ todos, onToggle }) {
         <ProgressBar value={done} max={todos.length} />
       </Card>
 
-      {/* Category filter */}
       <div className="flex gap-2 overflow-x-auto pb-2 mb-4 no-scrollbar">
         {cats.map(c => (
           <button key={c} onClick={() => setCat(c)}
@@ -275,60 +401,60 @@ function TodoPage({ todos, onToggle }) {
         ))}
       </div>
 
-      {/* Todo list */}
       <div className="space-y-2">
-        {filtered.map((t, i) => {
-          const isDone = t.status === '✅ 완료';
-          return (
-            <button key={i} onClick={() => onToggle(t)}
-              className={`w-full text-left bg-white rounded-2xl p-4 shadow-sm border-l-4 transition-all active:scale-98 ${
-                isDone ? 'border-emerald-300 opacity-50' :
-                t.priority === '🔴 높음' ? 'border-rose-400' : 'border-gray-200'
-              }`}>
-              <div className="flex items-start gap-3">
-                <span className="text-xl mt-0.5 flex-shrink-0">{isDone ? '✅' : '⬜'}</span>
-                <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-semibold ${isDone ? 'line-through text-gray-400' : 'text-gray-800'}`}>{t.title}</p>
-                  <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                    <span className="text-xs text-gray-400">📅 {t.deadline}</span>
-                    <span className="text-xs text-gray-400">· {t.assignee}</span>
-                    <StatusBadge status={t.status} />
+        {filtered.length === 0
+          ? <Card><p className="text-center text-gray-400 text-sm py-4">해당 카테고리 할일이 없어요 🎉</p></Card>
+          : filtered.map((t,i) => {
+              const isDone = t.status === '✅ 완료';
+              return (
+                <button key={i} onClick={() => onToggle(t)}
+                  className={`w-full text-left bg-white rounded-2xl p-4 shadow-sm border-l-4 transition-all active:scale-95 ${
+                    isDone ? 'border-emerald-300 opacity-50' : t.priority === '🔴 높음' ? 'border-rose-400' : 'border-gray-200'
+                  }`}>
+                  <div className="flex items-start gap-3">
+                    <span className="text-xl mt-0.5 flex-shrink-0">{isDone ? '✅' : '⬜'}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-semibold ${isDone ? 'line-through text-gray-400' : 'text-gray-800'}`}>{t.title}</p>
+                      <div className="flex flex-wrap items-center gap-2 mt-1">
+                        <span className="text-xs text-gray-400">📅 {t.deadline}</span>
+                        <span className="text-xs text-gray-400">· {t.assignee}</span>
+                        <StatusBadge status={t.status} />
+                      </div>
+                      {t.memo && <p className="text-xs text-gray-400 mt-1 truncate">{t.memo}</p>}
+                    </div>
                   </div>
-                  {t.memo && <p className="text-xs text-gray-400 mt-1 truncate">{t.memo}</p>}
-                </div>
-              </div>
-            </button>
-          );
-        })}
+                </button>
+              );
+            })
+        }
       </div>
     </div>
   );
 }
 
 // ══════════════════════════════════════════════════════════════
-// PAGE: BUDGET
+// PAGE: 예산
 // ══════════════════════════════════════════════════════════════
 function BudgetPage({ expenses, onAdd }) {
   const [showForm, setShowForm] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
+  const [saving, setSaving]     = useState(false);
+  const [form, setForm]         = useState({
     date: today(), item: '', category: '한국결혼식',
     amount: '', payer: '나디아', method: '토스 커플통장', note: ''
   });
 
-  const totalSpent = expenses.reduce((s, e) => s + (e.amount || 0), 0);
+  const totalSpent = expenses.reduce((s,e) => s + (e.amount||0), 0);
   const pct = Math.min(100, (totalSpent / TOTAL_BUDGET) * 100);
-
   const CATS    = ['한국결혼식','인도네시아결혼식','신혼집','신혼여행','상견례','기타'];
   const METHODS = ['토스 커플통장','loka likit 1.2 (진혁)','삼성카드 마일리지 (나디아)','나디아 통장','진혁 통장'];
 
-  // Category breakdown
   const catTotals = CATS.map(c => ({
     cat: c,
-    total: expenses.filter(e => e.category === c).reduce((s, e) => s + (e.amount || 0), 0)
+    total: expenses.filter(e => e.category === c).reduce((s,e) => s + (e.amount||0), 0)
   })).filter(c => c.total > 0);
 
   async function handleSave() {
+    if (!form.item || !form.amount) return;
     setSaving(true);
     await onAdd({ ...form, amount: Number(form.amount) });
     setShowForm(false);
@@ -336,25 +462,21 @@ function BudgetPage({ expenses, onAdd }) {
     setSaving(false);
   }
 
-  const inp = 'w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-rose-400 transition-colors';
+  const inp = 'w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-rose-400 bg-white';
 
   return (
     <div>
-      {/* Summary card */}
       <div className="bg-gradient-to-br from-rose-500 to-pink-400 rounded-3xl p-5 text-white mb-4 shadow-lg">
         <p className="text-sm opacity-80">총 지출 (목표 {fmt(TOTAL_BUDGET)}원)</p>
         <p className="text-4xl font-black my-1">{fmt(totalSpent)}<span className="text-lg font-light">원</span></p>
         <div className="mt-3">
-          <div className="flex justify-between text-xs opacity-75 mb-1">
-            <span>사용률</span><span>{pct.toFixed(1)}%</span>
-          </div>
+          <div className="flex justify-between text-xs opacity-75 mb-1"><span>사용률</span><span>{pct.toFixed(1)}%</span></div>
           <div className="h-2.5 bg-white/30 rounded-full overflow-hidden">
             <div className="h-full bg-white rounded-full transition-all" style={{ width: `${pct}%` }} />
           </div>
         </div>
       </div>
 
-      {/* Category breakdown */}
       {catTotals.length > 0 && (
         <Card className="mb-4">
           <p className="text-xs font-semibold text-gray-500 mb-3">카테고리별 지출</p>
@@ -372,14 +494,12 @@ function BudgetPage({ expenses, onAdd }) {
         </Card>
       )}
 
-      {/* Add button */}
       <button onClick={() => setShowForm(!showForm)}
         className="w-full bg-rose-500 text-white rounded-2xl py-3.5 font-bold mb-4 flex items-center justify-center gap-2 shadow-sm active:opacity-80">
         <span className="text-lg">{showForm ? '✕' : '+'}</span>
         {showForm ? '닫기' : '지출 추가'}
       </button>
 
-      {/* Form */}
       {showForm && (
         <Card className="mb-4 border border-rose-100">
           <p className="font-bold text-gray-800 mb-4">💸 지출 입력</p>
@@ -387,40 +507,40 @@ function BudgetPage({ expenses, onAdd }) {
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">날짜</label>
-                <input type="date" value={form.date} onChange={e => setForm({...form, date: e.target.value})} className={inp} />
+                <input type="date" value={form.date} onChange={e => setForm({...form,date:e.target.value})} className={inp} />
               </div>
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">금액 (원)</label>
-                <input type="number" placeholder="5000000" value={form.amount} onChange={e => setForm({...form, amount: e.target.value})} className={inp} />
+                <input type="number" placeholder="5000000" value={form.amount} onChange={e => setForm({...form,amount:e.target.value})} className={inp} />
               </div>
             </div>
             <div>
               <label className="text-xs text-gray-500 mb-1 block">항목 *</label>
-              <input placeholder="라마다 신도림 계약금" value={form.item} onChange={e => setForm({...form, item: e.target.value})} className={inp} />
+              <input placeholder="라마다 신도림 계약금" value={form.item} onChange={e => setForm({...form,item:e.target.value})} className={inp} />
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">카테고리</label>
-                <select value={form.category} onChange={e => setForm({...form, category: e.target.value})} className={inp}>
+                <select value={form.category} onChange={e => setForm({...form,category:e.target.value})} className={inp}>
                   {CATS.map(c => <option key={c}>{c}</option>)}
                 </select>
               </div>
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">결제자</label>
-                <select value={form.payer} onChange={e => setForm({...form, payer: e.target.value})} className={inp}>
+                <select value={form.payer} onChange={e => setForm({...form,payer:e.target.value})} className={inp}>
                   {['나디아','진혁','공동'].map(p => <option key={p}>{p}</option>)}
                 </select>
               </div>
             </div>
             <div>
               <label className="text-xs text-gray-500 mb-1 block">결제 수단</label>
-              <select value={form.method} onChange={e => setForm({...form, method: e.target.value})} className={inp}>
+              <select value={form.method} onChange={e => setForm({...form,method:e.target.value})} className={inp}>
                 {METHODS.map(m => <option key={m}>{m}</option>)}
               </select>
             </div>
             <div>
               <label className="text-xs text-gray-500 mb-1 block">메모</label>
-              <input placeholder="특이사항" value={form.note} onChange={e => setForm({...form, note: e.target.value})} className={inp} />
+              <input placeholder="특이사항" value={form.note} onChange={e => setForm({...form,note:e.target.value})} className={inp} />
             </div>
             <div className="flex gap-2 pt-1">
               <button onClick={() => setShowForm(false)} className="flex-1 border border-gray-200 rounded-xl py-3 text-gray-600 font-semibold">취소</button>
@@ -433,12 +553,11 @@ function BudgetPage({ expenses, onAdd }) {
         </Card>
       )}
 
-      {/* Expense list */}
       <p className="font-bold text-gray-700 mb-2 px-1">📝 지출 내역</p>
       {expenses.length === 0
-        ? <Card><p className="text-center text-gray-400 text-sm py-4">아직 지출 내역이 없어요</p></Card>
+        ? <Card><p className="text-center text-gray-400 text-sm py-4">아직 지출 내역이 없어요<br/><span className="text-xs">위 버튼으로 추가해보세요</span></p></Card>
         : <div className="space-y-2">
-            {[...expenses].reverse().map((e, i) => (
+            {[...expenses].reverse().map((e,i) => (
               <Card key={i} className="flex items-center gap-3 py-3">
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-gray-800 truncate">{e.item}</p>
@@ -457,143 +576,109 @@ function BudgetPage({ expenses, onAdd }) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// PAGE: VENDORS
+// PAGE: 신혼집
 // ══════════════════════════════════════════════════════════════
-function VendorPage({ vendors, onAdd, onReload }) {
-  const [tab, setTab]       = useState(VENDOR_TABS[0]);
+function HousingPage({ housing, onAdd, onDelete }) {
   const [showForm, setShowForm] = useState(false);
+  const [url, setUrl]   = useState('');
+  const [name, setName] = useState('');
+  const [price, setPrice] = useState('');
+  const [memo, setMemo] = useState('');
   const [saving, setSaving] = useState(false);
-  const [form, setForm]     = useState({ name:'', source:'인스타', price:'', package:'', homepage:'', portfolio:'', contact:'', memo:'' });
 
-  const list = vendors[tab] || [];
-
-  async function handleSave() {
-    setSaving(true);
-    const num = list.length + 1;
-    await onAdd({ ...form, section: tab, num, price: Number(form.price) });
-    setShowForm(false);
-    setForm({ name:'', source:'인스타', price:'', package:'', homepage:'', portfolio:'', contact:'', memo:'' });
-    setSaving(false);
-    onReload();
+  function handleUrlChange(val) {
+    setUrl(val);
+    const p = parseUrl(val);
+    if (!name) setName(p.name || '');
   }
 
-  const inp = 'w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-rose-400 transition-colors';
+  async function handleSave() {
+    if (!url) return;
+    setSaving(true);
+    await onAdd({ date: today(), name: name || url, url, price, memo });
+    setUrl(''); setName(''); setPrice(''); setMemo('');
+    setShowForm(false);
+    setSaving(false);
+  }
 
-  const tabLabel = tab.replace(/[📸🎬👗💄📷]/g,'').trim();
+  const inp = 'w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-indigo-400 bg-white';
 
   return (
     <div>
-      {/* Tabs */}
-      <div className="flex gap-2 overflow-x-auto pb-2 mb-4 no-scrollbar">
-        {VENDOR_TABS.map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`whitespace-nowrap px-3.5 py-1.5 rounded-full text-sm font-semibold transition-all ${
-              tab === t ? 'bg-rose-500 text-white shadow-sm' : 'bg-white text-gray-500 border border-gray-200'
-            }`}>{t}</button>
-        ))}
+      <div className="bg-gradient-to-br from-indigo-500 to-purple-400 rounded-3xl p-5 text-white mb-4 shadow-lg">
+        <p className="text-3xl mb-1">🏠</p>
+        <p className="font-black text-xl">신혼집 후보</p>
+        <p className="text-sm opacity-75 mt-1">관심 단지 {housing.length}곳 저장됨</p>
       </div>
 
-      {/* Count badge */}
-      <div className="flex items-center justify-between mb-3 px-1">
-        <p className="font-bold text-gray-700">{tabLabel} <span className="text-rose-500">{list.length}개</span></p>
-        <button onClick={() => setShowForm(!showForm)}
-          className="bg-rose-500 text-white rounded-xl px-4 py-2 text-sm font-semibold shadow-sm active:opacity-80">
-          {showForm ? '닫기' : '+ 업체 추가'}
-        </button>
-      </div>
+      <button onClick={() => setShowForm(!showForm)}
+        className="w-full bg-indigo-500 text-white rounded-2xl py-3.5 font-bold mb-4 flex items-center justify-center gap-2 shadow-sm active:opacity-80">
+        <span className="text-lg">{showForm ? '✕' : '+'}</span>
+        {showForm ? '닫기' : '단지 추가 (URL 붙여넣기)'}
+      </button>
 
-      {/* Add form */}
       {showForm && (
-        <Card className="mb-4 border border-rose-100">
-          <p className="font-bold text-gray-800 mb-4">🏢 {tabLabel} 업체 추가</p>
+        <Card className="mb-4 border border-indigo-100">
+          <p className="font-bold text-gray-800 mb-3">🏘️ 관심 단지 추가</p>
           <div className="space-y-3">
             <div>
-              <label className="text-xs text-gray-500 mb-1 block">업체명 *</label>
-              <input placeholder="업체명" value={form.name} onChange={e => setForm({...form, name:e.target.value})} className={inp} />
+              <label className="text-xs text-gray-500 mb-1 block">URL 붙여넣기 *</label>
+              <textarea rows={2} placeholder="호갱노노, 네이버 부동산, 직방 등 링크 붙여넣기"
+                value={url} onChange={e => handleUrlChange(e.target.value.trim())}
+                className={inp + ' resize-none'} />
+              {url && (
+                <p className="text-xs text-indigo-600 mt-1 px-1">
+                  {parseUrl(url).icon} 자동 감지: {parseUrl(url).source}
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">단지명 (자동입력, 수정 가능)</label>
+              <input placeholder="ex: 신도림 e편한세상" value={name} onChange={e => setName(e.target.value)} className={inp} />
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">발견 경로</label>
-                <select value={form.source} onChange={e => setForm({...form, source:e.target.value})} className={inp}>
-                  {['인스타','소개','블로그','웨딩박람회','기타'].map(s => <option key={s}>{s}</option>)}
-                </select>
+                <label className="text-xs text-gray-500 mb-1 block">가격 메모</label>
+                <input placeholder="ex: 전세 4.5억" value={price} onChange={e => setPrice(e.target.value)} className={inp} />
               </div>
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">가격 (원)</label>
-                <input type="number" placeholder="1500000" value={form.price} onChange={e => setForm({...form, price:e.target.value})} className={inp} />
+                <label className="text-xs text-gray-500 mb-1 block">기타 메모</label>
+                <input placeholder="ex: 역 5분" value={memo} onChange={e => setMemo(e.target.value)} className={inp} />
               </div>
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">패키지 구성</label>
-              <input placeholder="예: 6시간, 앨범 포함, 사진 200장" value={form.package} onChange={e => setForm({...form, package:e.target.value})} className={inp} />
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">홈페이지 / 인스타 링크</label>
-              <input placeholder="https://..." value={form.homepage} onChange={e => setForm({...form, homepage:e.target.value})} className={inp} />
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">포트폴리오 링크</label>
-              <input placeholder="https://..." value={form.portfolio} onChange={e => setForm({...form, portfolio:e.target.value})} className={inp} />
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">연락처</label>
-              <input placeholder="@인스타 or 전화번호" value={form.contact} onChange={e => setForm({...form, contact:e.target.value})} className={inp} />
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">메모 (소개해준 사람, 특이사항 등)</label>
-              <input placeholder="메모" value={form.memo} onChange={e => setForm({...form, memo:e.target.value})} className={inp} />
             </div>
             <div className="flex gap-2 pt-1">
               <button onClick={() => setShowForm(false)} className="flex-1 border border-gray-200 rounded-xl py-3 text-gray-600 font-semibold">취소</button>
-              <button onClick={handleSave} disabled={!form.name || saving}
-                className="flex-1 bg-rose-500 text-white rounded-xl py-3 font-bold disabled:opacity-40">
-                {saving ? '저장 중...' : '저장 💾'}
+              <button onClick={handleSave} disabled={!url || saving}
+                className="flex-1 bg-indigo-500 text-white rounded-xl py-3 font-bold disabled:opacity-40">
+                {saving ? '저장 중...' : '추가 🏠'}
               </button>
             </div>
           </div>
         </Card>
       )}
 
-      {/* Vendor list */}
-      {list.length === 0
-        ? <Card><p className="text-center text-gray-400 text-sm py-8">아직 등록된 업체가 없어요<br/>위의 버튼으로 추가해보세요! 📸</p></Card>
+      {housing.length === 0
+        ? <Card><p className="text-center text-gray-400 text-sm py-8">아직 저장된 단지가 없어요<br/>호갱노노 링크를 붙여넣어 추가해보세요! 🏘️</p></Card>
         : <div className="space-y-3">
-            {list.map((v, i) => (
+            {housing.map((h,i) => (
               <Card key={i}>
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <div>
-                    <p className="font-bold text-gray-800">{v.name}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">{v.source}</p>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-gray-800 truncate">{h.name || '단지'}</p>
+                    {h.price && <p className="text-sm text-indigo-600 font-semibold mt-0.5">{h.price}</p>}
+                    {h.memo && <p className="text-xs text-gray-500 mt-0.5">{h.memo}</p>}
+                    <p className="text-xs text-gray-400 mt-1">추가일: {h.date}</p>
                   </div>
-                  <div className="text-right flex-shrink-0">
-                    <p className="font-black text-rose-500 text-lg">{v.price > 0 ? fmt(v.price)+'원' : '-'}</p>
-                    {v.rating > 0 && <p className="text-yellow-400">{'⭐'.repeat(Math.min(5,Number(v.rating)))}</p>}
+                  <div className="flex flex-col gap-1.5 flex-shrink-0">
+                    {h.url && (
+                      <a href={h.url} target="_blank" rel="noopener noreferrer"
+                        className="text-xs bg-indigo-50 text-indigo-600 px-2.5 py-1.5 rounded-lg font-medium text-center">
+                        🔗 링크
+                      </a>
+                    )}
+                    <button onClick={() => onDelete(h)} className="text-xs bg-gray-100 text-gray-400 px-2.5 py-1.5 rounded-lg">삭제</button>
                   </div>
                 </div>
-                {v.package && (
-                  <p className="text-xs text-gray-600 bg-gray-50 rounded-xl px-3 py-2 mb-2">{v.package}</p>
-                )}
-                <div className="flex flex-wrap gap-2">
-                  {v.homepage && (
-                    <a href={v.homepage} target="_blank" rel="noopener noreferrer"
-                      className="text-xs bg-rose-50 text-rose-600 px-2.5 py-1.5 rounded-lg font-medium">
-                      🔗 홈페이지
-                    </a>
-                  )}
-                  {v.portfolio && (
-                    <a href={v.portfolio} target="_blank" rel="noopener noreferrer"
-                      className="text-xs bg-pink-50 text-pink-600 px-2.5 py-1.5 rounded-lg font-medium">
-                      📷 포트폴리오
-                    </a>
-                  )}
-                  {v.contact && (
-                    <span className="text-xs bg-gray-100 text-gray-600 px-2.5 py-1.5 rounded-lg">{v.contact}</span>
-                  )}
-                  {v.selected === '✅' && (
-                    <span className="text-xs bg-emerald-50 text-emerald-600 px-2.5 py-1.5 rounded-lg font-bold">✅ 선택</span>
-                  )}
-                </div>
-                {v.memo && <p className="text-xs text-gray-400 mt-2 italic">{v.memo}</p>}
               </Card>
             ))}
           </div>
@@ -603,14 +688,221 @@ function VendorPage({ vendors, onAdd, onReload }) {
 }
 
 // ══════════════════════════════════════════════════════════════
+// PAGE: 업체
+// ══════════════════════════════════════════════════════════════
+function VendorAddForm({ section, listLen, onSave, onCancel }) {
+  const [url, setUrl]     = useState('');
+  const [name, setName]   = useState('');
+  const [price, setPrice] = useState('');
+  const [memo, setMemo]   = useState('');
+  const [saving, setSaving] = useState(false);
+
+  function handleUrlChange(val) {
+    setUrl(val);
+    const p = parseUrl(val);
+    if (!name) setName(p.name || '');
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    await onSave({ section, num: listLen + 1, name: name || url, source: parseUrl(url).source || '인스타', homepage: url, price: Number(price)||0, memo });
+    setSaving(false);
+  }
+
+  const inp = 'w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-rose-400 bg-white';
+  return (
+    <Card className="mb-4 border border-rose-100">
+      <p className="font-bold text-gray-800 mb-3">업체 추가</p>
+      <div className="space-y-3">
+        <div>
+          <label className="text-xs text-gray-500 mb-1 block">링크 붙여넣기 (인스타, 홈페이지 등)</label>
+          <textarea rows={2} placeholder="https://instagram.com/..." value={url}
+            onChange={e => handleUrlChange(e.target.value.trim())} className={inp + ' resize-none'} />
+          {url && name && <p className="text-xs text-rose-600 mt-1 px-1">✨ 자동 감지: <b>{name}</b></p>}
+        </div>
+        <div>
+          <label className="text-xs text-gray-500 mb-1 block">업체명 (자동입력, 수정 가능)</label>
+          <input placeholder="업체명" value={name} onChange={e => setName(e.target.value)} className={inp} />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">가격 (원, 선택)</label>
+            <input type="number" placeholder="1500000" value={price} onChange={e => setPrice(e.target.value)} className={inp} />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">메모 (선택)</label>
+            <input placeholder="소개해준 사람 등" value={memo} onChange={e => setMemo(e.target.value)} className={inp} />
+          </div>
+        </div>
+        <div className="flex gap-2 pt-1">
+          <button onClick={onCancel} className="flex-1 border border-gray-200 rounded-xl py-3 text-gray-600 font-semibold">취소</button>
+          <button onClick={handleSave} disabled={!name || saving}
+            className="flex-1 bg-rose-500 text-white rounded-xl py-3 font-bold disabled:opacity-40">
+            {saving ? '저장 중...' : '저장 💾'}
+          </button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function PlannerAddForm({ onSave, onCancel }) {
+  const [url, setUrl]     = useState('');
+  const [name, setName]   = useState('');
+  const [price, setPrice] = useState('');
+  const [memo, setMemo]   = useState('');
+  const [saving, setSaving] = useState(false);
+
+  function handleUrlChange(val) {
+    setUrl(val);
+    const p = parseUrl(val);
+    if (!name) setName(p.name || '');
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    await onSave({ date: today(), name: name || url, url, price, memo });
+    setSaving(false);
+  }
+
+  const inp = 'w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-rose-400 bg-white';
+  return (
+    <Card className="mb-4 border border-rose-100">
+      <p className="font-bold text-gray-800 mb-3">🗓️ 플래너 추가</p>
+      <div className="space-y-3">
+        <div>
+          <label className="text-xs text-gray-500 mb-1 block">인스타 링크 붙여넣기 *</label>
+          <textarea rows={2} placeholder="https://instagram.com/planner_name" value={url}
+            onChange={e => handleUrlChange(e.target.value.trim())} className={inp + ' resize-none'} />
+          {url && name && <p className="text-xs text-rose-600 mt-1 px-1">✨ 자동 감지: <b>{name}</b></p>}
+        </div>
+        <div>
+          <label className="text-xs text-gray-500 mb-1 block">이름 (자동입력, 수정 가능)</label>
+          <input placeholder="플래너 이름 or 인스타 ID" value={name} onChange={e => setName(e.target.value)} className={inp} />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">가격 메모 (선택)</label>
+            <input placeholder="ex: 150만원~" value={price} onChange={e => setPrice(e.target.value)} className={inp} />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">메모 (선택)</label>
+            <input placeholder="소개해준 사람 등" value={memo} onChange={e => setMemo(e.target.value)} className={inp} />
+          </div>
+        </div>
+        <div className="flex gap-2 pt-1">
+          <button onClick={onCancel} className="flex-1 border border-gray-200 rounded-xl py-3 text-gray-600 font-semibold">취소</button>
+          <button onClick={handleSave} disabled={!url || saving}
+            className="flex-1 bg-rose-500 text-white rounded-xl py-3 font-bold disabled:opacity-40">
+            {saving ? '저장 중...' : '추가 🗓️'}
+          </button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function VendorPage({ vendors, planners, onAddVendor, onAddPlanner, onDeletePlanner, onReload }) {
+  const ALL_TABS = [...VENDOR_TABS, '🗓️ 플래너'];
+  const [tab, setTab]         = useState(ALL_TABS[0]);
+  const [showForm, setShowForm] = useState(false);
+
+  const isPlanner = tab === '🗓️ 플래너';
+  const list = isPlanner ? planners : (vendors[tab] || []);
+  const tabLabel = tab.replace(/[📸🎬👗💄📷🗓️]/g,'').trim();
+
+  return (
+    <div>
+      <div className="flex gap-2 overflow-x-auto pb-2 mb-4 no-scrollbar">
+        {ALL_TABS.map(t => (
+          <button key={t} onClick={() => { setTab(t); setShowForm(false); }}
+            className={`whitespace-nowrap px-3.5 py-1.5 rounded-full text-sm font-semibold transition-all ${
+              tab === t ? 'bg-rose-500 text-white shadow-sm' : 'bg-white text-gray-500 border border-gray-200'
+            }`}>{t}</button>
+        ))}
+      </div>
+
+      <div className="flex items-center justify-between mb-3 px-1">
+        <p className="font-bold text-gray-700">{tabLabel} <span className="text-rose-500">{list.length}개</span></p>
+        <button onClick={() => setShowForm(!showForm)}
+          className="bg-rose-500 text-white rounded-xl px-4 py-2 text-sm font-semibold shadow-sm active:opacity-80">
+          {showForm ? '닫기' : '+ 추가'}
+        </button>
+      </div>
+
+      {showForm && (
+        isPlanner
+          ? <PlannerAddForm onSave={async d => { await onAddPlanner(d); setShowForm(false); }} onCancel={() => setShowForm(false)} />
+          : <VendorAddForm section={tab} listLen={list.length} onSave={async d => { await onAddVendor(d); setShowForm(false); onReload(); }} onCancel={() => setShowForm(false)} />
+      )}
+
+      {isPlanner ? (
+        list.length === 0
+          ? <Card><p className="text-center text-gray-400 text-sm py-8">아직 저장된 플래너가 없어요<br/>인스타 링크를 붙여넣어 추가해보세요! 🗓️</p></Card>
+          : <div className="space-y-3">
+              {list.map((p,i) => (
+                <Card key={i}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-gray-800">{p.name}</p>
+                      {p.price && <p className="text-sm text-rose-500 font-semibold mt-0.5">{p.price}</p>}
+                      {p.memo && <p className="text-xs text-gray-500 mt-0.5">{p.memo}</p>}
+                      <p className="text-xs text-gray-400 mt-1">{p.date}</p>
+                    </div>
+                    <div className="flex flex-col gap-1.5 flex-shrink-0">
+                      {p.url && (
+                        <a href={p.url} target="_blank" rel="noopener noreferrer"
+                          className="text-xs bg-rose-50 text-rose-600 px-2.5 py-1.5 rounded-lg font-medium text-center">📸 인스타</a>
+                      )}
+                      <button onClick={() => onDeletePlanner(p)} className="text-xs bg-gray-100 text-gray-400 px-2.5 py-1.5 rounded-lg">삭제</button>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+      ) : (
+        list.length === 0
+          ? <Card><p className="text-center text-gray-400 text-sm py-8">아직 등록된 업체가 없어요<br/>링크를 붙여넣어 추가해보세요! 📸</p></Card>
+          : <div className="space-y-3">
+              {list.map((v,i) => (
+                <Card key={i}>
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div>
+                      <p className="font-bold text-gray-800">{v.name}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{v.source}</p>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className="font-black text-rose-500 text-lg">{v.price > 0 ? fmt(v.price)+'원' : '-'}</p>
+                      {v.rating > 0 && <p className="text-yellow-400 text-xs">{'⭐'.repeat(Math.min(5,Number(v.rating)))}</p>}
+                    </div>
+                  </div>
+                  {v.package && <p className="text-xs text-gray-600 bg-gray-50 rounded-xl px-3 py-2 mb-2">{v.package}</p>}
+                  <div className="flex flex-wrap gap-2">
+                    {v.homepage && <a href={v.homepage} target="_blank" rel="noopener noreferrer" className="text-xs bg-rose-50 text-rose-600 px-2.5 py-1.5 rounded-lg font-medium">🔗 링크</a>}
+                    {v.portfolio && <a href={v.portfolio} target="_blank" rel="noopener noreferrer" className="text-xs bg-pink-50 text-pink-600 px-2.5 py-1.5 rounded-lg font-medium">📷 포트폴리오</a>}
+                    {v.contact && <span className="text-xs bg-gray-100 text-gray-600 px-2.5 py-1.5 rounded-lg">{v.contact}</span>}
+                    {v.selected === '✅' && <span className="text-xs bg-emerald-50 text-emerald-600 px-2.5 py-1.5 rounded-lg font-bold">✅ 선택</span>}
+                  </div>
+                  {v.memo && <p className="text-xs text-gray-400 mt-2 italic">{v.memo}</p>}
+                </Card>
+              ))}
+            </div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
 // APP ROOT
 // ══════════════════════════════════════════════════════════════
 function App() {
   const [apiUrl,   setApiUrl]   = useState(() => localStorage.getItem('weddingApiUrl') || '');
-  const [page,     setPage]     = useState('home');
+  const [page,     setPage]     = useState('summary');
   const [todos,    setTodos]    = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [vendors,  setVendors]  = useState({});
+  const [housing,  setHousing]  = useState([]);
+  const [planners, setPlanners] = useState([]);
   const [loading,  setLoading]  = useState(false);
   const [lastSync, setLastSync] = useState(null);
 
@@ -620,14 +912,15 @@ function App() {
     if (!api) return;
     setLoading(true);
     try {
-      const [t, e, v] = await Promise.all([
-        api('getTodos'),
-        api('getExpenses'),
-        api('getVendors'),
+      const [t, e, v, h, p] = await Promise.all([
+        api('getTodos'), api('getExpenses'), api('getVendors'),
+        api('getHousing'), api('getPlanners'),
       ]);
       if (Array.isArray(t)) setTodos(t);
       if (Array.isArray(e)) setExpenses(e);
-      if (t && typeof v === 'object' && !v.error) setVendors(v);
+      if (v && typeof v === 'object' && !v.error) setVendors(v);
+      if (Array.isArray(h)) setHousing(h);
+      if (Array.isArray(p)) setPlanners(p);
       setLastSync(new Date().toLocaleTimeString('ko-KR'));
     } finally { setLoading(false); }
   }, [apiUrl]);
@@ -650,24 +943,46 @@ function App() {
     await api('addExpense', data);
   }
 
-  async function handleAddVendor(data) {
-    await api('addVendor', data);
+  async function handleAddHousing(data) {
+    await api('addHousing', data);
+    const h = await api('getHousing');
+    if (Array.isArray(h)) setHousing(h);
+  }
+
+  async function handleDeleteHousing(item) {
+    if (!window.confirm(`"${item.name}" 삭제할까요?`)) return;
+    await api('deleteHousing', { rowIndex: item.rowIndex });
+    setHousing(prev => prev.filter(h => h.rowIndex !== item.rowIndex));
+  }
+
+  async function handleAddPlanner(data) {
+    await api('addPlanner', data);
+    const p = await api('getPlanners');
+    if (Array.isArray(p)) setPlanners(p);
+  }
+
+  async function handleDeletePlanner(item) {
+    if (!window.confirm(`"${item.name}" 삭제할까요?`)) return;
+    await api('deletePlanner', { rowIndex: item.rowIndex });
+    setPlanners(prev => prev.filter(p => p.rowIndex !== item.rowIndex));
   }
 
   if (!apiUrl) return <SetupScreen onSave={handleSaveUrl} />;
 
   const NAV = [
-    { id:'home',   icon:'🏠', label:'홈' },
-    { id:'todo',   icon:'✅', label:'할일' },
-    { id:'budget', icon:'💰', label:'예산' },
-    { id:'vendor', icon:'📸', label:'업체' },
+    { id:'summary', icon:'📊', label:'요약' },
+    { id:'todo',    icon:'✅', label:'할일' },
+    { id:'budget',  icon:'💰', label:'예산' },
+    { id:'housing', icon:'🏠', label:'신혼집' },
+    { id:'wedding', icon:'💍', label:'결혼식' },
+    { id:'vendor',  icon:'📸', label:'업체' },
   ];
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <div className="max-w-md mx-auto w-full flex flex-col min-h-screen relative">
 
-        {/* Header */}
+        {/* 헤더 */}
         <div className="bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between sticky top-0 z-20">
           <div>
             <p className="font-black text-gray-800 text-lg leading-tight">💍 결혼 준비</p>
@@ -679,13 +994,11 @@ function App() {
               {loading ? '⏳' : '🔄'}
             </button>
             <button onClick={() => { localStorage.removeItem('weddingApiUrl'); setApiUrl(''); }}
-              className="text-xs bg-gray-100 rounded-xl px-2.5 py-1.5 text-gray-400">
-              ⚙️
-            </button>
+              className="text-xs bg-gray-100 rounded-xl px-2.5 py-1.5 text-gray-400">⚙️</button>
           </div>
         </div>
 
-        {/* Content */}
+        {/* 콘텐츠 */}
         <div className="flex-1 overflow-y-auto px-4 pt-4 safe-pb">
           {loading && todos.length === 0
             ? <div className="flex flex-col items-center justify-center h-64 text-gray-400">
@@ -693,24 +1006,26 @@ function App() {
                 <p className="text-sm">구글 시트에서 데이터 불러오는 중...</p>
               </div>
             : <>
-                {page === 'home'   && <HomePage todos={todos} expenses={expenses} />}
-                {page === 'todo'   && <TodoPage todos={todos} onToggle={handleToggle} />}
-                {page === 'budget' && <BudgetPage expenses={expenses} onAdd={handleAddExpense} />}
-                {page === 'vendor' && <VendorPage vendors={vendors} onAdd={handleAddVendor} onReload={load} />}
+                {page === 'summary' && <SummaryPage todos={todos} expenses={expenses} />}
+                {page === 'todo'    && <TodoPage todos={todos} onToggle={handleToggle} />}
+                {page === 'budget'  && <BudgetPage expenses={expenses} onAdd={handleAddExpense} />}
+                {page === 'housing' && <HousingPage housing={housing} onAdd={handleAddHousing} onDelete={handleDeleteHousing} />}
+                {page === 'wedding' && <WeddingPage todos={todos} />}
+                {page === 'vendor'  && <VendorPage vendors={vendors} planners={planners} onAddVendor={d => api('addVendor', d)} onAddPlanner={handleAddPlanner} onDeletePlanner={handleDeletePlanner} onReload={load} />}
               </>
           }
         </div>
 
-        {/* Bottom nav */}
+        {/* 하단 네비게이션 */}
         <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white/95 backdrop-blur border-t border-gray-100 safe-nav z-20">
-          <div className="flex">
+          <div className="flex overflow-x-auto no-scrollbar">
             {NAV.map(n => (
               <button key={n.id} onClick={() => setPage(n.id)}
-                className={`flex-1 flex flex-col items-center py-2.5 transition-colors ${
+                className={`flex-shrink-0 flex flex-col items-center py-2 px-3.5 transition-colors ${
                   page === n.id ? 'text-rose-500' : 'text-gray-400'
                 }`}>
                 <span className="text-xl">{n.icon}</span>
-                <span className="text-xs mt-0.5 font-semibold">{n.label}</span>
+                <span className="text-xs mt-0.5 font-semibold whitespace-nowrap">{n.label}</span>
                 {page === n.id && <div className="w-1 h-1 rounded-full bg-rose-500 mt-0.5" />}
               </button>
             ))}
