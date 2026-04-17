@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>💍 나디아 & 진혁 결혼 준비</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { -webkit-tap-highlight-color: transparent; }
+    body { font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif; background: #fdf2f4; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .safe-pb { padding-bottom: calc(4rem + env(safe-area-inset-bottom)); }
+    .safe-nav { padding-bottom: env(safe-area-inset-bottom); }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useCallback, useRef } = React;
+
+// ── 설정 ──────────────────────────────────────────────────────
+const WEDDING_DATE  = new Date('2027-05-23T15:40:00+09:00');
+const TOTAL_BUDGET  = 80_000_000;
+const VENDOR_TABS   = ['📸 본식스냅','🎬 본식영상','👗 드레스','💄 메이크업','📷 스튜디오 (스드메)'];
+const KEY_DATES     = [
+  { label:'세례식',   date:'2026-11-01', icon:'⛪' },
+  { label:'혼인교리', date:'2026-11-28', icon:'📖' },
+  { label:'상견례',   date:'2026-07-31', icon:'👨‍👩‍👧' },
+  { label:'신혼여행', date:'2027-05-24', icon:'✈️' },
+];
+
+// ── Helpers ───────────────────────────────────────────────────
+function daysUntil(d) {
+  const now = new Date(); now.setHours(0,0,0,0);
+  const t   = new Date(d); t.setHours(0,0,0,0);
+  return Math.round((t - now) / 86400000);
+}
+function fmt(n) { return Number(n||0).toLocaleString('ko-KR'); }
+function today() { return new Date().toISOString().split('T')[0]; }
+
+// ── API ───────────────────────────────────────────────────────
+function makeApi(baseUrl) {
+  return async function call(action, body = null) {
+    const data = JSON.stringify({ action, ...(body || {}) });
+    const url  = `${baseUrl}?data=${encodeURIComponent(data)}`;
+    try {
+      const res = await fetch(url, { redirect: 'follow' });
+      return await res.json();
+    } catch (e) {
+      console.error('API error:', e);
+      return { error: e.message };
+    }
+  };
+}
+
+// ══════════════════════════════════════════════════════════════
+// SETUP SCREEN
+// ══════════════════════════════════════════════════════════════
+function SetupScreen({ onSave }) {
+  const [url, setUrl] = useState('');
+  const [testing, setTesting] = useState(false);
+  const [err, setErr] = useState('');
+
+  async function test() {
+    setTesting(true); setErr('');
+    try {
+      const api = makeApi(url);
+      const res = await api('ping');
+      if (res.status === 'ok') { onSave(url); }
+      else { setErr('연결 실패: ' + (res.error || JSON.stringify(res))); }
+    } catch (e) { setErr('연결 실패: ' + e.message); }
+    finally { setTesting(false); }
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-6 bg-gradient-to-b from-rose-50 to-pink-100">
+      <div className="bg-white rounded-3xl shadow-xl p-8 w-full max-w-sm">
+        <div className="text-center mb-6">
+          <div className="text-6xl mb-3">💍</div>
+          <h1 className="text-2xl font-bold text-gray-800">처음 설정</h1>
+          <p className="text-gray-500 text-sm mt-2">Google Apps Script 웹 앱 URL을 붙여넣으세요</p>
+        </div>
+
+        <div className="bg-rose-50 rounded-xl p-4 mb-5 text-xs text-rose-700 space-y-1">
+          <p className="font-semibold">📋 Apps Script 배포 순서:</p>
+          <p>1. 구글시트 → 확장 프로그램 → Apps Script</p>
+          <p>2. Code.gs 내용 붙여넣기 후 저장</p>
+          <p>3. 배포 → 새 배포 → 웹 앱 선택</p>
+          <p>4. 실행: <b>나(본인)</b> / 액세스: <b>모든 사용자</b></p>
+          <p>5. URL 복사 후 아래에 붙여넣기</p>
+        </div>
+
+        <textarea
+          className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-rose-400 transition-colors resize-none"
+          rows={3}
+          placeholder="https://script.google.com/macros/s/...exec"
+          value={url}
+          onChange={e => setUrl(e.target.value.trim())}
+        />
+
+        {err && <p className="text-red-500 text-xs mt-2">{err}</p>}
+
+        <button
+          onClick={test}
+          disabled={!url || testing}
+          className="w-full mt-4 bg-gradient-to-r from-rose-500 to-pink-500 text-white rounded-xl py-3.5 font-bold text-base shadow-lg disabled:opacity-40 transition-opacity"
+        >
+          {testing ? '연결 확인 중...' : '연결 & 시작하기 💕'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// COMPONENTS
+// ══════════════════════════════════════════════════════════════
+function Card({ children, className = '' }) {
+  return <div className={`bg-white rounded-2xl shadow-sm p-4 ${className}`}>{children}</div>;
+}
+
+function StatusBadge({ status }) {
+  const map = {
+    '✅ 완료':  'bg-emerald-100 text-emerald-700',
+    '⏳ 진행중':'bg-amber-100 text-amber-700',
+    '🔲 미시작':'bg-gray-100 text-gray-500',
+  };
+  const s = String(status || '');
+  const cls = map[s] || 'bg-gray-100 text-gray-500';
+  return <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cls}`}>{s.replace(/[✅⏳🔲]/g,'').trim()}</span>;
+}
+
+function ProgressBar({ value, max, className = '' }) {
+  const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
+  return (
+    <div className={`h-2 bg-gray-100 rounded-full overflow-hidden ${className}`}>
+      <div
+        className="h-full bg-gradient-to-r from-rose-400 to-pink-400 rounded-full transition-all duration-500"
+        style={{ width: `${pct}%` }}
+      />
+    </div>
+  );
+}
+
+// ── PHASE 계산 ────────────────────────────────────────────────
+function getPhase() {
+  const now = new Date();
+  if (now < new Date('2026-05-23')) return { label:'결혼식 1년 이상 前', color:'bg-red-100 text-red-700',    hint:'⚡ 스냅/스드메/예물 지금 알아볼 때!' };
+  if (now < new Date('2026-07-23')) return { label:'결혼식 1년 前 구간',   color:'bg-orange-100 text-orange-700', hint:'🔥 스냅·스드메 계약 마감 임박!' };
+  if (now < new Date('2026-11-23')) return { label:'결혼식 10개월 前',     color:'bg-yellow-100 text-yellow-700', hint:'드레스투어 · 신혼여행 예약' };
+  if (now < new Date('2027-02-23')) return { label:'결혼식 6개월 前',      color:'bg-blue-100 text-blue-700',    hint:'청첩장 · 신혼집 계약' };
+  if (now < new Date('2027-04-23')) return { label:'결혼식 3개월 前',      color:'bg-purple-100 text-purple-700', hint:'사회자·부케·최종 미팅' };
+  return                                  { label:'결혼식 1개월 前 이내',   color:'bg-rose-100 text-rose-700',    hint:'🚨 최종 준비 단계!' };
+}
+
+// ══════════════════════════════════════════════════════════════
+// PAGE: HOME
+// ══════════════════════════════════════════════════════════════
+function HomePage({ todos, expenses }) {
+  const dday = daysUntil(WEDDING_DATE);
+  const phase = getPhase();
+  const urgent = todos.filter(t => t.status !== '✅ 완료' && t.priority === '🔴 높음').slice(0, 5);
+  const totalSpent = expenses.reduce((s, e) => s + (e.amount || 0), 0);
+  const done = todos.filter(t => t.status === '✅ 완료').length;
+
+  return (
+    <div className="space-y-4">
+      {/* D-Day */}
+      <div className="bg-gradient-to-br from-rose-500 to-pink-400 rounded-3xl p-6 text-white shadow-lg">
+        <p className="text-sm opacity-80">한국 결혼식까지</p>
+        <div className="flex items-baseline gap-2 my-1">
+          <span className="text-7xl font-black">{dday}</span>
+          <span className="text-2xl font-light">일</span>
+        </div>
+        <p className="text-sm opacity-90 font-medium">2027년 5월 23일 (일) 15:40</p>
+        <p className="text-xs opacity-70 mt-0.5">라마다 신도림 하늘정원홀 💒</p>
+      </div>
+
+      {/* 현재 단계 */}
+      <div className={`rounded-2xl p-4 ${phase.color}`}>
+        <p className="text-xs font-medium opacity-60 mb-0.5">현재 단계</p>
+        <p className="font-bold text-base">{phase.label}</p>
+        <p className="text-sm mt-0.5">{phase.hint}</p>
+      </div>
+
+      {/* Mini stats */}
+      <div className="grid grid-cols-2 gap-3">
+        <Card>
+          <p className="text-xs text-gray-400 mb-1">할일 진행률</p>
+          <p className="text-2xl font-black text-rose-500">{done}<span className="text-sm text-gray-400 font-normal">/{todos.length}</span></p>
+          <ProgressBar value={done} max={todos.length} className="mt-2" />
+        </Card>
+        <Card>
+          <p className="text-xs text-gray-400 mb-1">총 지출</p>
+          <p className="text-xl font-black text-rose-500">{fmt(totalSpent)}<span className="text-xs font-normal text-gray-400">원</span></p>
+          <ProgressBar value={totalSpent} max={TOTAL_BUDGET} className="mt-2" />
+        </Card>
+      </div>
+
+      {/* Key dates */}
+      <div>
+        <p className="font-bold text-gray-700 mb-2 px-1">📅 주요 일정 D-Day</p>
+        <div className="grid grid-cols-2 gap-2">
+          {KEY_DATES.map(kd => {
+            const d = daysUntil(kd.date);
+            return (
+              <Card key={kd.label} className="p-3">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className="text-base">{kd.icon}</span>
+                  <span className="text-xs font-medium text-gray-500">{kd.label}</span>
+                </div>
+                <p className="text-2xl font-black text-rose-500">D-{d}</p>
+                <p className="text-xs text-gray-400">{kd.date}</p>
+              </Card>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Urgent todos */}
+      <div>
+        <p className="font-bold text-gray-700 mb-2 px-1">🚨 지금 당장 해야할 일</p>
+        {urgent.length === 0
+          ? <Card><p className="text-center text-gray-400 text-sm py-2">🎉 급한 일이 없어요!</p></Card>
+          : <div className="space-y-2">
+              {urgent.map((t, i) => (
+                <Card key={i} className="flex items-center gap-3 py-3">
+                  <span className="text-xl flex-shrink-0">🔴</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-800 truncate">{t.title}</p>
+                    <p className="text-xs text-gray-400">{t.deadline} · {t.assignee}</p>
+                  </div>
+                </Card>
+              ))}
+            </div>
+        }
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// PAGE: TODOS
+// ══════════════════════════════════════════════════════════════
+function TodoPage({ todos, onToggle }) {
+  const [cat, setCat] = useState('전체');
+  const cats = ['전체','한국결혼식','종교/교리','상견례','신혼집','인도네시아결혼식','신혼여행','기타'];
+
+  const filtered = cat === '전체' ? todos : todos.filter(t => t.category === cat);
+  const done = todos.filter(t => t.status === '✅ 완료').length;
+
+  return (
+    <div>
+      {/* Progress summary */}
+      <Card className="mb-4">
+        <div className="flex justify-between items-center mb-2">
+          <span className="text-sm font-semibold text-gray-700">전체 진행률</span>
+          <span className="text-sm font-black text-rose-500">{done} / {todos.length}</span>
+        </div>
+        <ProgressBar value={done} max={todos.length} />
+      </Card>
+
+      {/* Category filter */}
+      <div className="flex gap-2 overflow-x-auto pb-2 mb-4 no-scrollbar">
+        {cats.map(c => (
+          <button key={c} onClick={() => setCat(c)}
+            className={`whitespace-nowrap px-3.5 py-1.5 rounded-full text-sm font-semibold transition-all ${
+              cat === c ? 'bg-rose-500 text-white shadow-sm' : 'bg-white text-gray-500 border border-gray-200'
+            }`}>{c}</button>
+        ))}
+      </div>
+
+      {/* Todo list */}
+      <div className="space-y-2">
+        {filtered.map((t, i) => {
+          const isDone = t.status === '✅ 완료';
+          return (
+            <button key={i} onClick={() => onToggle(t)}
+              className={`w-full text-left bg-white rounded-2xl p-4 shadow-sm border-l-4 transition-all active:scale-98 ${
+                isDone ? 'border-emerald-300 opacity-50' :
+                t.priority === '🔴 높음' ? 'border-rose-400' : 'border-gray-200'
+              }`}>
+              <div className="flex items-start gap-3">
+                <span className="text-xl mt-0.5 flex-shrink-0">{isDone ? '✅' : '⬜'}</span>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-semibold ${isDone ? 'line-through text-gray-400' : 'text-gray-800'}`}>{t.title}</p>
+                  <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                    <span className="text-xs text-gray-400">📅 {t.deadline}</span>
+                    <span className="text-xs text-gray-400">· {t.assignee}</span>
+                    <StatusBadge status={t.status} />
+                  </div>
+                  {t.memo && <p className="text-xs text-gray-400 mt-1 truncate">{t.memo}</p>}
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// PAGE: BUDGET
+// ══════════════════════════════════════════════════════════════
+function BudgetPage({ expenses, onAdd }) {
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    date: today(), item: '', category: '한국결혼식',
+    amount: '', payer: '나디아', method: '토스 커플통장', note: ''
+  });
+
+  const totalSpent = expenses.reduce((s, e) => s + (e.amount || 0), 0);
+  const pct = Math.min(100, (totalSpent / TOTAL_BUDGET) * 100);
+
+  const CATS    = ['한국결혼식','인도네시아결혼식','신혼집','신혼여행','상견례','기타'];
+  const METHODS = ['토스 커플통장','loka likit 1.2 (진혁)','삼성카드 마일리지 (나디아)','나디아 통장','진혁 통장'];
+
+  // Category breakdown
+  const catTotals = CATS.map(c => ({
+    cat: c,
+    total: expenses.filter(e => e.category === c).reduce((s, e) => s + (e.amount || 0), 0)
+  })).filter(c => c.total > 0);
+
+  async function handleSave() {
+    setSaving(true);
+    await onAdd({ ...form, amount: Number(form.amount) });
+    setShowForm(false);
+    setForm({ date: today(), item: '', category: '한국결혼식', amount: '', payer: '나디아', method: '토스 커플통장', note: '' });
+    setSaving(false);
+  }
+
+  const inp = 'w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-rose-400 transition-colors';
+
+  return (
+    <div>
+      {/* Summary card */}
+      <div className="bg-gradient-to-br from-rose-500 to-pink-400 rounded-3xl p-5 text-white mb-4 shadow-lg">
+        <p className="text-sm opacity-80">총 지출 (목표 {fmt(TOTAL_BUDGET)}원)</p>
+        <p className="text-4xl font-black my-1">{fmt(totalSpent)}<span className="text-lg font-light">원</span></p>
+        <div className="mt-3">
+          <div className="flex justify-between text-xs opacity-75 mb-1">
+            <span>사용률</span><span>{pct.toFixed(1)}%</span>
+          </div>
+          <div className="h-2.5 bg-white/30 rounded-full overflow-hidden">
+            <div className="h-full bg-white rounded-full transition-all" style={{ width: `${pct}%` }} />
+          </div>
+        </div>
+      </div>
+
+      {/* Category breakdown */}
+      {catTotals.length > 0 && (
+        <Card className="mb-4">
+          <p className="text-xs font-semibold text-gray-500 mb-3">카테고리별 지출</p>
+          <div className="space-y-2">
+            {catTotals.map(c => (
+              <div key={c.cat}>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-gray-600">{c.cat}</span>
+                  <span className="font-semibold text-rose-500">{fmt(c.total)}원</span>
+                </div>
+                <ProgressBar value={c.total} max={totalSpent} />
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Add button */}
+      <button onClick={() => setShowForm(!showForm)}
+        className="w-full bg-rose-500 text-white rounded-2xl py-3.5 font-bold mb-4 flex items-center justify-center gap-2 shadow-sm active:opacity-80">
+        <span className="text-lg">{showForm ? '✕' : '+'}</span>
+        {showForm ? '닫기' : '지출 추가'}
+      </button>
+
+      {/* Form */}
+      {showForm && (
+        <Card className="mb-4 border border-rose-100">
+          <p className="font-bold text-gray-800 mb-4">💸 지출 입력</p>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">날짜</label>
+                <input type="date" value={form.date} onChange={e => setForm({...form, date: e.target.value})} className={inp} />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">금액 (원)</label>
+                <input type="number" placeholder="5000000" value={form.amount} onChange={e => setForm({...form, amount: e.target.value})} className={inp} />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">항목 *</label>
+              <input placeholder="라마다 신도림 계약금" value={form.item} onChange={e => setForm({...form, item: e.target.value})} className={inp} />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">카테고리</label>
+                <select value={form.category} onChange={e => setForm({...form, category: e.target.value})} className={inp}>
+                  {CATS.map(c => <option key={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">결제자</label>
+                <select value={form.payer} onChange={e => setForm({...form, payer: e.target.value})} className={inp}>
+                  {['나디아','진혁','공동'].map(p => <option key={p}>{p}</option>)}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">결제 수단</label>
+              <select value={form.method} onChange={e => setForm({...form, method: e.target.value})} className={inp}>
+                {METHODS.map(m => <option key={m}>{m}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">메모</label>
+              <input placeholder="특이사항" value={form.note} onChange={e => setForm({...form, note: e.target.value})} className={inp} />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setShowForm(false)} className="flex-1 border border-gray-200 rounded-xl py-3 text-gray-600 font-semibold">취소</button>
+              <button onClick={handleSave} disabled={!form.item || !form.amount || saving}
+                className="flex-1 bg-rose-500 text-white rounded-xl py-3 font-bold disabled:opacity-40">
+                {saving ? '저장 중...' : '저장 💾'}
+              </button>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Expense list */}
+      <p className="font-bold text-gray-700 mb-2 px-1">📝 지출 내역</p>
+      {expenses.length === 0
+        ? <Card><p className="text-center text-gray-400 text-sm py-4">아직 지출 내역이 없어요</p></Card>
+        : <div className="space-y-2">
+            {[...expenses].reverse().map((e, i) => (
+              <Card key={i} className="flex items-center gap-3 py-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-800 truncate">{e.item}</p>
+                  <p className="text-xs text-gray-400 mt-0.5 truncate">{e.date} · {e.payer} · {e.method}</p>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p className="font-black text-rose-500">{fmt(e.amount)}원</p>
+                  <p className="text-xs text-gray-400">{e.category}</p>
+                </div>
+              </Card>
+            ))}
+          </div>
+      }
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// PAGE: VENDORS
+// ══════════════════════════════════════════════════════════════
+function VendorPage({ vendors, onAdd, onReload }) {
+  const [tab, setTab]       = useState(VENDOR_TABS[0]);
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm]     = useState({ name:'', source:'인스타', price:'', package:'', homepage:'', portfolio:'', contact:'', memo:'' });
+
+  const list = vendors[tab] || [];
+
+  async function handleSave() {
+    setSaving(true);
+    const num = list.length + 1;
+    await onAdd({ ...form, section: tab, num, price: Number(form.price) });
+    setShowForm(false);
+    setForm({ name:'', source:'인스타', price:'', package:'', homepage:'', portfolio:'', contact:'', memo:'' });
+    setSaving(false);
+    onReload();
+  }
+
+  const inp = 'w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-rose-400 transition-colors';
+
+  const tabLabel = tab.replace(/[📸🎬👗💄📷]/g,'').trim();
+
+  return (
+    <div>
+      {/* Tabs */}
+      <div className="flex gap-2 overflow-x-auto pb-2 mb-4 no-scrollbar">
+        {VENDOR_TABS.map(t => (
+          <button key={t} onClick={() => setTab(t)}
+            className={`whitespace-nowrap px-3.5 py-1.5 rounded-full text-sm font-semibold transition-all ${
+              tab === t ? 'bg-rose-500 text-white shadow-sm' : 'bg-white text-gray-500 border border-gray-200'
+            }`}>{t}</button>
+        ))}
+      </div>
+
+      {/* Count badge */}
+      <div className="flex items-center justify-between mb-3 px-1">
+        <p className="font-bold text-gray-700">{tabLabel} <span className="text-rose-500">{list.length}개</span></p>
+        <button onClick={() => setShowForm(!showForm)}
+          className="bg-rose-500 text-white rounded-xl px-4 py-2 text-sm font-semibold shadow-sm active:opacity-80">
+          {showForm ? '닫기' : '+ 업체 추가'}
+        </button>
+      </div>
+
+      {/* Add form */}
+      {showForm && (
+        <Card className="mb-4 border border-rose-100">
+          <p className="font-bold text-gray-800 mb-4">🏢 {tabLabel} 업체 추가</p>
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">업체명 *</label>
+              <input placeholder="업체명" value={form.name} onChange={e => setForm({...form, name:e.target.value})} className={inp} />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">발견 경로</label>
+                <select value={form.source} onChange={e => setForm({...form, source:e.target.value})} className={inp}>
+                  {['인스타','소개','블로그','웨딩박람회','기타'].map(s => <option key={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">가격 (원)</label>
+                <input type="number" placeholder="1500000" value={form.price} onChange={e => setForm({...form, price:e.target.value})} className={inp} />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">패키지 구성</label>
+              <input placeholder="예: 6시간, 앨범 포함, 사진 200장" value={form.package} onChange={e => setForm({...form, package:e.target.value})} className={inp} />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">홈페이지 / 인스타 링크</label>
+              <input placeholder="https://..." value={form.homepage} onChange={e => setForm({...form, homepage:e.target.value})} className={inp} />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">포트폴리오 링크</label>
+              <input placeholder="https://..." value={form.portfolio} onChange={e => setForm({...form, portfolio:e.target.value})} className={inp} />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">연락처</label>
+              <input placeholder="@인스타 or 전화번호" value={form.contact} onChange={e => setForm({...form, contact:e.target.value})} className={inp} />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">메모 (소개해준 사람, 특이사항 등)</label>
+              <input placeholder="메모" value={form.memo} onChange={e => setForm({...form, memo:e.target.value})} className={inp} />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setShowForm(false)} className="flex-1 border border-gray-200 rounded-xl py-3 text-gray-600 font-semibold">취소</button>
+              <button onClick={handleSave} disabled={!form.name || saving}
+                className="flex-1 bg-rose-500 text-white rounded-xl py-3 font-bold disabled:opacity-40">
+                {saving ? '저장 중...' : '저장 💾'}
+              </button>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Vendor list */}
+      {list.length === 0
+        ? <Card><p className="text-center text-gray-400 text-sm py-8">아직 등록된 업체가 없어요<br/>위의 버튼으로 추가해보세요! 📸</p></Card>
+        : <div className="space-y-3">
+            {list.map((v, i) => (
+              <Card key={i}>
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div>
+                    <p className="font-bold text-gray-800">{v.name}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{v.source}</p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="font-black text-rose-500 text-lg">{v.price > 0 ? fmt(v.price)+'원' : '-'}</p>
+                    {v.rating > 0 && <p className="text-yellow-400">{'⭐'.repeat(Math.min(5,Number(v.rating)))}</p>}
+                  </div>
+                </div>
+                {v.package && (
+                  <p className="text-xs text-gray-600 bg-gray-50 rounded-xl px-3 py-2 mb-2">{v.package}</p>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  {v.homepage && (
+                    <a href={v.homepage} target="_blank" rel="noopener noreferrer"
+                      className="text-xs bg-rose-50 text-rose-600 px-2.5 py-1.5 rounded-lg font-medium">
+                      🔗 홈페이지
+                    </a>
+                  )}
+                  {v.portfolio && (
+                    <a href={v.portfolio} target="_blank" rel="noopener noreferrer"
+                      className="text-xs bg-pink-50 text-pink-600 px-2.5 py-1.5 rounded-lg font-medium">
+                      📷 포트폴리오
+                    </a>
+                  )}
+                  {v.contact && (
+                    <span className="text-xs bg-gray-100 text-gray-600 px-2.5 py-1.5 rounded-lg">{v.contact}</span>
+                  )}
+                  {v.selected === '✅' && (
+                    <span className="text-xs bg-emerald-50 text-emerald-600 px-2.5 py-1.5 rounded-lg font-bold">✅ 선택</span>
+                  )}
+                </div>
+                {v.memo && <p className="text-xs text-gray-400 mt-2 italic">{v.memo}</p>}
+              </Card>
+            ))}
+          </div>
+      }
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// APP ROOT
+// ══════════════════════════════════════════════════════════════
+function App() {
+  const [apiUrl,   setApiUrl]   = useState(() => localStorage.getItem('weddingApiUrl') || '');
+  const [page,     setPage]     = useState('home');
+  const [todos,    setTodos]    = useState([]);
+  const [expenses, setExpenses] = useState([]);
+  const [vendors,  setVendors]  = useState({});
+  const [loading,  setLoading]  = useState(false);
+  const [lastSync, setLastSync] = useState(null);
+
+  const api = apiUrl ? makeApi(apiUrl) : null;
+
+  const load = useCallback(async () => {
+    if (!api) return;
+    setLoading(true);
+    try {
+      const [t, e, v] = await Promise.all([
+        api('getTodos'),
+        api('getExpenses'),
+        api('getVendors'),
+      ]);
+      if (Array.isArray(t)) setTodos(t);
+      if (Array.isArray(e)) setExpenses(e);
+      if (t && typeof v === 'object' && !v.error) setVendors(v);
+      setLastSync(new Date().toLocaleTimeString('ko-KR'));
+    } finally { setLoading(false); }
+  }, [apiUrl]);
+
+  useEffect(() => { load(); }, [load]);
+
+  function handleSaveUrl(url) {
+    localStorage.setItem('weddingApiUrl', url);
+    setApiUrl(url);
+  }
+
+  async function handleToggle(todo) {
+    const next = todo.status === '✅ 완료' ? '🔲 미시작' : '✅ 완료';
+    setTodos(prev => prev.map(t => t.num === todo.num ? {...t, status: next} : t));
+    await api('updateTodo', { num: todo.num, status: next });
+  }
+
+  async function handleAddExpense(data) {
+    setExpenses(prev => [...prev, data]);
+    await api('addExpense', data);
+  }
+
+  async function handleAddVendor(data) {
+    await api('addVendor', data);
+  }
+
+  if (!apiUrl) return <SetupScreen onSave={handleSaveUrl} />;
+
+  const NAV = [
+    { id:'home',   icon:'🏠', label:'홈' },
+    { id:'todo',   icon:'✅', label:'할일' },
+    { id:'budget', icon:'💰', label:'예산' },
+    { id:'vendor', icon:'📸', label:'업체' },
+  ];
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      <div className="max-w-md mx-auto w-full flex flex-col min-h-screen relative">
+
+        {/* Header */}
+        <div className="bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between sticky top-0 z-20">
+          <div>
+            <p className="font-black text-gray-800 text-lg leading-tight">💍 결혼 준비</p>
+            <p className="text-xs text-gray-400">나디아 & 진혁 · {lastSync ? `${lastSync} 동기화` : '동기화 전'}</p>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={load} disabled={loading}
+              className="text-sm bg-gray-100 rounded-xl px-3 py-1.5 text-gray-500 font-medium active:opacity-60">
+              {loading ? '⏳' : '🔄'}
+            </button>
+            <button onClick={() => { localStorage.removeItem('weddingApiUrl'); setApiUrl(''); }}
+              className="text-xs bg-gray-100 rounded-xl px-2.5 py-1.5 text-gray-400">
+              ⚙️
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto px-4 pt-4 safe-pb">
+          {loading && todos.length === 0
+            ? <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+                <div className="text-4xl mb-3 animate-pulse">💍</div>
+                <p className="text-sm">구글 시트에서 데이터 불러오는 중...</p>
+              </div>
+            : <>
+                {page === 'home'   && <HomePage todos={todos} expenses={expenses} />}
+                {page === 'todo'   && <TodoPage todos={todos} onToggle={handleToggle} />}
+                {page === 'budget' && <BudgetPage expenses={expenses} onAdd={handleAddExpense} />}
+                {page === 'vendor' && <VendorPage vendors={vendors} onAdd={handleAddVendor} onReload={load} />}
+              </>
+          }
+        </div>
+
+        {/* Bottom nav */}
+        <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white/95 backdrop-blur border-t border-gray-100 safe-nav z-20">
+          <div className="flex">
+            {NAV.map(n => (
+              <button key={n.id} onClick={() => setPage(n.id)}
+                className={`flex-1 flex flex-col items-center py-2.5 transition-colors ${
+                  page === n.id ? 'text-rose-500' : 'text-gray-400'
+                }`}>
+                <span className="text-xl">{n.icon}</span>
+                <span className="text-xs mt-0.5 font-semibold">{n.label}</span>
+                {page === n.id && <div className="w-1 h-1 rounded-full bg-rose-500 mt-0.5" />}
+              </button>
+            ))}
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
