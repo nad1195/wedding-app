@@ -777,6 +777,14 @@ function HousingEditModal({ item, onSave, onDelete, onClose }) {
   );
 }
 
+function getBuiltAge(builtYear) {
+  if (!builtYear) return '';
+  const year = parseInt(builtYear);
+  if (!year || isNaN(year)) return builtYear;
+  const age = new Date().getFullYear() - year;
+  return `${year}(${age}년차)`;
+}
+
 function HousingPage({ housing, onAdd, onDelete, onEdit, onUpdateVisit }) {
   const [showForm, setShowForm]   = useState(false);
   const [saving, setSaving]       = useState(false);
@@ -788,11 +796,14 @@ function HousingPage({ housing, onAdd, onDelete, onEdit, onUpdateVisit }) {
   const [addForm, setAddForm] = useState({ name:'', gu:'', dong:'', pyung:'', builtYear:'', salePrice:'', rentPrice:'', hoganUrl:'', naverUrl:'', memo:'' });
 
   async function handleSave() {
-    if (!addForm.name) return; setSaving(true);
+    if (!addForm.name) return;
+    // 폼 즉시 닫고 목록으로
+    setShowForm(false);
+    setSaving(true);
     const region = addForm.gu + (addForm.dong ? ' '+addForm.dong : '');
     await onAdd({ ...addForm, region, date: today() });
     setAddForm({ name:'', gu:'', dong:'', pyung:'', builtYear:'', salePrice:'', rentPrice:'', hoganUrl:'', naverUrl:'', memo:'' });
-    setShowForm(false); setSaving(false);
+    setSaving(false);
   }
 
   async function handleVisitToggle(h) {
@@ -818,14 +829,13 @@ function HousingPage({ housing, onAdd, onDelete, onEdit, onUpdateVisit }) {
 
   return (
     <div>
+      {/* 헤더 + 추가 버튼 한 줄에 */}
       <div className="bg-gradient-to-br from-indigo-500 to-purple-400 rounded-3xl p-4 text-white mb-3 shadow-lg flex items-center justify-between">
-        <p className="font-black text-lg">🏠 신혼집 후보</p>
-        <span className="text-sm opacity-75">{housing.length}곳 저장</span>
+        <p className="font-black text-lg">🏠 신혼집 후보 <span className="text-sm font-normal opacity-75">{housing.length}곳</span></p>
+        <button onClick={()=>setShowForm(!showForm)} className="bg-white/20 text-white border border-white/30 rounded-xl px-3 py-1.5 text-sm font-semibold active:opacity-70">
+          {showForm ? '✕ 닫기' : '+ 추가'}
+        </button>
       </div>
-
-      <button onClick={()=>setShowForm(!showForm)} className="w-full border-2 border-dashed border-indigo-200 text-indigo-400 rounded-2xl py-2.5 text-sm font-semibold mb-3 flex items-center justify-center gap-1.5">
-        {showForm?'✕ 닫기':'+ 단지 추가'}
-      </button>
 
       {showForm && (
         <Card className="mb-3 border border-indigo-100">
@@ -852,50 +862,61 @@ function HousingPage({ housing, onAdd, onDelete, onEdit, onUpdateVisit }) {
         </div>
       )}
 
+      {saving && <p className="text-center text-xs text-indigo-400 mb-2">저장 중...</p>}
+
       {list.length===0
         ? <Card><p className="text-center text-gray-400 text-sm py-8">아직 저장된 단지가 없어요 🏘️</p></Card>
         : <div className="space-y-2">
             {list.map((h,i)=>{
               const lp = useLongPress(()=>setEditItem(h));
+              const builtLabel = getBuiltAge(h.builtYear);
               return (
                 <div key={i} {...lp} className="bg-white rounded-2xl shadow-sm select-none active:opacity-70">
-                  <div className="px-4 py-3">
-                    {/* 핵심 정보: 단지명 / 지역 / 가격 */}
-                    <div className="flex items-start justify-between gap-2 mb-1">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-bold text-gray-800 text-sm leading-tight">{h.name}</p>
-                        {h.region && <p className="text-xs text-gray-500 mt-0.5">{h.region}</p>}
-                      </div>
-                      <div className="text-right flex-shrink-0">
-                        {h.salePrice && <p className="text-sm font-black text-gray-800">{h.salePrice}</p>}
-                        {h.rentPrice && <p className="text-xs text-indigo-600 font-semibold">{h.rentPrice}</p>}
+                  <div className="px-3 py-2.5">
+                    {/* 지역 — 맨 위 왼쪽 */}
+                    {h.region && <p className="text-xs text-gray-400 mb-0.5">{h.region}</p>}
+                    {/* 단지명 + 가격 */}
+                    <div className="flex items-baseline justify-between gap-2 mb-1.5">
+                      <p className="font-bold text-gray-800 text-sm leading-tight flex-1 min-w-0 truncate">{h.name}</p>
+                      <div className="flex-shrink-0 text-right">
+                        {h.salePrice && <p className="text-sm font-bold text-gray-800"><span className="text-gray-400 font-normal text-xs">매매 </span>{h.salePrice}</p>}
+                        {h.rentPrice && <p className="text-sm font-bold text-indigo-600"><span className="text-indigo-400 font-normal text-xs">전세 </span>{h.rentPrice}</p>}
                       </div>
                     </div>
                     {/* 부가 정보: 평수, 연식, 메모 */}
-                    {(h.pyung||h.builtYear||h.memo) && (
-                      <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                        {h.pyung && <span className="text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded-lg">{h.pyung}</span>}
-                        {h.builtYear && <span className="text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded-lg">{h.builtYear}년</span>}
+                    {(h.pyung||builtLabel||h.memo) && (
+                      <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                        {h.pyung && <span className="text-xs text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">{h.pyung}</span>}
+                        {builtLabel && <span className="text-xs text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">{builtLabel}</span>}
                         {h.memo && <span className="text-xs text-gray-400 truncate">{h.memo}</span>}
                       </div>
                     )}
-                    {/* URL 버튼: 아이콘 형태 */}
-                    {(h.hoganUrl||h.naverUrl) && (
-                      <div className="flex gap-1.5 mt-2">
-                        {h.hoganUrl && <a href={h.hoganUrl} target="_blank" rel="noopener noreferrer" className="text-xs px-2.5 py-1 rounded-lg font-medium bg-indigo-50 text-indigo-600" onClick={e=>e.stopPropagation()}>🏘️ 호갱노노</a>}
-                        {h.naverUrl && <a href={h.naverUrl} target="_blank" rel="noopener noreferrer" className="text-xs px-2.5 py-1 rounded-lg font-medium bg-green-50 text-green-600" onClick={e=>e.stopPropagation()}>🏠 네이버</a>}
-                      </div>
-                    )}
-                    {/* 임장 */}
-                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-50">
-                      <button onClick={e=>{e.stopPropagation();handleVisitToggle(h);}} className={`flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg ${h.visited==='Y'?'bg-emerald-50 text-emerald-600':'bg-gray-50 text-gray-400'}`}>
-                        {h.visited==='Y'?'✅':'⬜'} 임장 {h.visited==='Y'?'완료':'예정'}
+                    {/* 버튼 한 줄: 링크 + 임장 + 후기 */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {h.hoganUrl && (
+                        <a href={h.hoganUrl} target="_blank" rel="noopener noreferrer"
+                           className="text-xs px-2 py-1 rounded-lg font-medium bg-gray-100 text-gray-600 flex items-center gap-0.5"
+                           onClick={e=>e.stopPropagation()}>
+                          🔗 호갱노노
+                        </a>
+                      )}
+                      {h.naverUrl && (
+                        <a href={h.naverUrl} target="_blank" rel="noopener noreferrer"
+                           className="text-xs px-2 py-1 rounded-lg font-medium bg-gray-100 text-gray-600 flex items-center gap-0.5"
+                           onClick={e=>e.stopPropagation()}>
+                          🔗 네이버
+                        </a>
+                      )}
+                      <button onClick={e=>{e.stopPropagation();handleVisitToggle(h);}}
+                              className={`text-xs px-2 py-1 rounded-lg font-semibold ${h.visited==='Y'?'bg-emerald-50 text-emerald-600':'bg-gray-50 text-gray-400'}`}>
+                        {h.visited==='Y'?'✅ 임장완료':'⬜ 임장예정'}
                       </button>
-                      <button onClick={e=>{e.stopPropagation();setReviewTarget(h);setReviewText(h.visitReview||'');}} className="text-xs text-indigo-400 font-medium">
+                      <button onClick={e=>{e.stopPropagation();setReviewTarget(h);setReviewText(h.visitReview||'');}}
+                              className="text-xs px-2 py-1 rounded-lg bg-indigo-50 text-indigo-400 font-semibold">
                         {h.visitReview ? '후기 수정' : '+ 후기'}
                       </button>
                     </div>
-                    {h.visitReview && <p className="text-xs text-gray-500 bg-gray-50 rounded-xl px-3 py-2 mt-1 italic">"{h.visitReview}"</p>}
+                    {h.visitReview && <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-2.5 py-1.5 mt-1.5 italic">"{h.visitReview}"</p>}
                   </div>
                 </div>
               );
@@ -922,7 +943,7 @@ function HousingPage({ housing, onAdd, onDelete, onEdit, onUpdateVisit }) {
         <HousingEditModal
           item={editItem}
           onSave={async(data)=>{ await onEdit(data); setEditItem(null); }}
-          onDelete={async(item)=>{ await onDelete(item); setEditItem(null); }}
+          onDelete={async(item)=>{ setEditItem(null); await onDelete(item); }}
           onClose={()=>setEditItem(null)}
         />
       )}
