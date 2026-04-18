@@ -367,6 +367,29 @@ function TodoEditModal({ todo, onSave, onDelete, onClose }) {
   );
 }
 
+function TodoCard({ todo, onToggle, onLongPress }) {
+  const lp = useLongPress(onLongPress);
+  const isDone = todo.status === '✅ 완료';
+  return (
+    <div {...lp} className={`bg-white rounded-2xl shadow-sm border-l-4 select-none ${isDone?'border-emerald-300 opacity-50':todo.priority==='🔴 높음'?'border-rose-400':'border-gray-200'}`}>
+      <button className="w-full text-left p-3.5 active:opacity-70" onClick={()=>onToggle(todo)}>
+        <div className="flex items-start gap-3">
+          <span className="text-xl mt-0.5 flex-shrink-0">{isDone?'✅':'⬜'}</span>
+          <div className="flex-1 min-w-0">
+            <p className={`text-sm font-semibold ${isDone?'line-through text-gray-400':'text-gray-800'}`}>{todo.title}</p>
+            <div className="flex flex-wrap items-center gap-1.5 mt-1">
+              {todo.deadline && <span className="text-xs text-gray-400">📅 {todo.deadline}</span>}
+              <span className="text-xs text-gray-400">· {todo.assignee}</span>
+              <StatusBadge status={todo.status}/>
+            </div>
+            {todo.memo && <p className="text-xs text-gray-400 mt-1 truncate">{todo.memo}</p>}
+          </div>
+        </div>
+      </button>
+    </div>
+  );
+}
+
 function TodoPage({ todos, onToggle, onAdd, onEdit, onDelete }) {
   const [cat, setCat]           = useState('전체');
   const [sort, setSort]         = useState('added');
@@ -471,28 +494,9 @@ function TodoPage({ todos, onToggle, onAdd, onEdit, onDelete }) {
       <div className="space-y-2">
         {filtered.length===0
           ? <Card><p className="text-center text-gray-400 text-sm py-4">할일이 없어요 🎉</p></Card>
-          : filtered.map((t,i)=>{
-              const isDone = t.status==='✅ 완료';
-              const lp = useLongPress(()=>setEditItem(t));
-              return (
-                <div key={i} {...lp} className={`bg-white rounded-2xl shadow-sm border-l-4 select-none ${isDone?'border-emerald-300 opacity-50':t.priority==='🔴 높음'?'border-rose-400':'border-gray-200'}`}>
-                  <button className="w-full text-left p-3.5 active:opacity-70" onClick={()=>onToggle(t)}>
-                    <div className="flex items-start gap-3">
-                      <span className="text-xl mt-0.5 flex-shrink-0">{isDone?'✅':'⬜'}</span>
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-sm font-semibold ${isDone?'line-through text-gray-400':'text-gray-800'}`}>{t.title}</p>
-                        <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                          {t.deadline && <span className="text-xs text-gray-400">📅 {t.deadline}</span>}
-                          <span className="text-xs text-gray-400">· {t.assignee}</span>
-                          <StatusBadge status={t.status}/>
-                        </div>
-                        {t.memo && <p className="text-xs text-gray-400 mt-1 truncate">{t.memo}</p>}
-                      </div>
-                    </div>
-                  </button>
-                </div>
-              );
-            })
+          : filtered.map((t,i)=>(
+              <TodoCard key={i} todo={t} onToggle={onToggle} onLongPress={()=>setEditItem(t)} />
+            ))
         }
       </div>
       <p className="text-center text-xs text-gray-300 mt-3 mb-1">길게 누르면 편집</p>
@@ -554,6 +558,27 @@ function BudgetEditModal({ item, onSave, onDelete, onClose }) {
         </div>
       </div>
     </BottomModal>
+  );
+}
+
+function BudgetCard({ item, onLongPress }) {
+  const lp = useLongPress(onLongPress);
+  const balance = (item.total||0) - (item.deposit||0);
+  return (
+    <div {...lp} className="bg-white rounded-2xl shadow-sm select-none active:opacity-70">
+      <div className="px-4 py-3">
+        <div className="flex items-center justify-between mb-1.5">
+          <p className="font-bold text-gray-800 text-sm">{item.name}</p>
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${item.status==='잔금완료'?'bg-emerald-100 text-emerald-700':item.status==='계약완료'?'bg-blue-100 text-blue-700':'bg-gray-100 text-gray-500'}`}>{item.status}</span>
+        </div>
+        <div className="flex gap-4 text-xs">
+          <div><p className="text-gray-400">납부</p><p className="font-bold text-gray-700">{fmt(item.deposit)}원</p></div>
+          <div><p className="text-gray-400">총 견적</p><p className="font-bold text-rose-500">{fmt(item.total)}원</p></div>
+          {balance > 0 && <div><p className="text-gray-400">잔금</p><p className="font-bold text-amber-600">{fmt(balance)}원</p></div>}
+        </div>
+        {item.balanceDate && balance > 0 && <p className="text-xs text-gray-400 mt-1">잔금 예정: {item.balanceDate}</p>}
+      </div>
+    </div>
   );
 }
 
@@ -645,26 +670,9 @@ function BudgetPage({ contracts, onAdd, onEdit, onDelete }) {
       {contracts.length===0
         ? <Card><p className="text-center text-gray-400 text-sm py-6">아직 항목이 없어요.<br/>위에서 추가해보세요!</p></Card>
         : <div className="space-y-2">
-            {contracts.map((c,i)=>{
-              const lp = useLongPress(()=>setEditItem(c));
-              const balance = (c.total||0) - (c.deposit||0);
-              return (
-                <div key={i} {...lp} className="bg-white rounded-2xl shadow-sm select-none active:opacity-70">
-                  <div className="px-4 py-3">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <p className="font-bold text-gray-800 text-sm">{c.name}</p>
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${c.status==='잔금완료'?'bg-emerald-100 text-emerald-700':c.status==='계약완료'?'bg-blue-100 text-blue-700':'bg-gray-100 text-gray-500'}`}>{c.status}</span>
-                    </div>
-                    <div className="flex gap-4 text-xs">
-                      <div><p className="text-gray-400">납부</p><p className="font-bold text-gray-700">{fmt(c.deposit)}원</p></div>
-                      <div><p className="text-gray-400">총 견적</p><p className="font-bold text-rose-500">{fmt(c.total)}원</p></div>
-                      {balance > 0 && <div><p className="text-gray-400">잔금</p><p className="font-bold text-amber-600">{fmt(balance)}원</p></div>}
-                    </div>
-                    {c.balanceDate && balance > 0 && <p className="text-xs text-gray-400 mt-1">잔금 예정: {c.balanceDate}</p>}
-                  </div>
-                </div>
-              );
-            })}
+            {contracts.map((c,i)=>(
+              <BudgetCard key={i} item={c} onLongPress={()=>setEditItem(c)} />
+            ))}
           </div>
       }
       <p className="text-center text-xs text-gray-300 mt-3 mb-1">길게 누르면 편집</p>
@@ -785,6 +793,57 @@ function getBuiltAge(builtYear) {
   return `${year}(${age}년차)`;
 }
 
+function HousingCard({ h, onLongPress, onVisitToggle, onReviewClick }) {
+  const lp = useLongPress(onLongPress);
+  const builtLabel = getBuiltAge(h.builtYear);
+  return (
+    <div {...lp} className="bg-white rounded-2xl shadow-sm select-none active:opacity-70">
+      <div className="px-3 py-2.5">
+        {h.region && <p className="text-xs text-gray-400 mb-0.5">{h.region}</p>}
+        <div className="flex items-baseline justify-between gap-2 mb-1.5">
+          <p className="font-bold text-gray-800 text-sm leading-tight flex-1 min-w-0 truncate">{h.name}</p>
+          <div className="flex-shrink-0 text-right">
+            {h.salePrice && <p className="text-sm font-bold text-gray-800"><span className="text-gray-400 font-normal text-xs">매매 </span>{h.salePrice}</p>}
+            {h.rentPrice && <p className="text-sm font-bold text-indigo-600"><span className="text-indigo-400 font-normal text-xs">전세 </span>{h.rentPrice}</p>}
+          </div>
+        </div>
+        {(h.pyung||builtLabel||h.memo) && (
+          <div className="flex flex-wrap items-center gap-1.5 mb-2">
+            {h.pyung && <span className="text-xs text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">{h.pyung}</span>}
+            {builtLabel && <span className="text-xs text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">{builtLabel}</span>}
+            {h.memo && <span className="text-xs text-gray-400 truncate">{h.memo}</span>}
+          </div>
+        )}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {h.hoganUrl && (
+            <a href={h.hoganUrl} target="_blank" rel="noopener noreferrer"
+               className="text-xs px-2 py-1 rounded-lg font-medium bg-gray-100 text-gray-600 flex items-center gap-0.5"
+               onClick={e=>e.stopPropagation()}>
+              🔗 호갱노노
+            </a>
+          )}
+          {h.naverUrl && (
+            <a href={h.naverUrl} target="_blank" rel="noopener noreferrer"
+               className="text-xs px-2 py-1 rounded-lg font-medium bg-gray-100 text-gray-600 flex items-center gap-0.5"
+               onClick={e=>e.stopPropagation()}>
+              🔗 네이버
+            </a>
+          )}
+          <button onClick={e=>{e.stopPropagation();onVisitToggle(h);}}
+                  className={`text-xs px-2 py-1 rounded-lg font-semibold ${h.visited==='Y'?'bg-emerald-50 text-emerald-600':'bg-gray-50 text-gray-400'}`}>
+            {h.visited==='Y'?'✅ 임장완료':'⬜ 임장예정'}
+          </button>
+          <button onClick={e=>{e.stopPropagation();onReviewClick(h);}}
+                  className="text-xs px-2 py-1 rounded-lg bg-indigo-50 text-indigo-400 font-semibold">
+            {h.visitReview ? '후기 수정' : '+ 후기'}
+          </button>
+        </div>
+        {h.visitReview && <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-2.5 py-1.5 mt-1.5 italic">"{h.visitReview}"</p>}
+      </div>
+    </div>
+  );
+}
+
 function HousingPage({ housing, onAdd, onDelete, onEdit, onUpdateVisit }) {
   const [showForm, setShowForm]   = useState(false);
   const [saving, setSaving]       = useState(false);
@@ -867,60 +926,13 @@ function HousingPage({ housing, onAdd, onDelete, onEdit, onUpdateVisit }) {
       {list.length===0
         ? <Card><p className="text-center text-gray-400 text-sm py-8">아직 저장된 단지가 없어요 🏘️</p></Card>
         : <div className="space-y-2">
-            {list.map((h,i)=>{
-              const lp = useLongPress(()=>setEditItem(h));
-              const builtLabel = getBuiltAge(h.builtYear);
-              return (
-                <div key={i} {...lp} className="bg-white rounded-2xl shadow-sm select-none active:opacity-70">
-                  <div className="px-3 py-2.5">
-                    {/* 지역 — 맨 위 왼쪽 */}
-                    {h.region && <p className="text-xs text-gray-400 mb-0.5">{h.region}</p>}
-                    {/* 단지명 + 가격 */}
-                    <div className="flex items-baseline justify-between gap-2 mb-1.5">
-                      <p className="font-bold text-gray-800 text-sm leading-tight flex-1 min-w-0 truncate">{h.name}</p>
-                      <div className="flex-shrink-0 text-right">
-                        {h.salePrice && <p className="text-sm font-bold text-gray-800"><span className="text-gray-400 font-normal text-xs">매매 </span>{h.salePrice}</p>}
-                        {h.rentPrice && <p className="text-sm font-bold text-indigo-600"><span className="text-indigo-400 font-normal text-xs">전세 </span>{h.rentPrice}</p>}
-                      </div>
-                    </div>
-                    {/* 부가 정보: 평수, 연식, 메모 */}
-                    {(h.pyung||builtLabel||h.memo) && (
-                      <div className="flex flex-wrap items-center gap-1.5 mb-2">
-                        {h.pyung && <span className="text-xs text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">{h.pyung}</span>}
-                        {builtLabel && <span className="text-xs text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">{builtLabel}</span>}
-                        {h.memo && <span className="text-xs text-gray-400 truncate">{h.memo}</span>}
-                      </div>
-                    )}
-                    {/* 버튼 한 줄: 링크 + 임장 + 후기 */}
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {h.hoganUrl && (
-                        <a href={h.hoganUrl} target="_blank" rel="noopener noreferrer"
-                           className="text-xs px-2 py-1 rounded-lg font-medium bg-gray-100 text-gray-600 flex items-center gap-0.5"
-                           onClick={e=>e.stopPropagation()}>
-                          🔗 호갱노노
-                        </a>
-                      )}
-                      {h.naverUrl && (
-                        <a href={h.naverUrl} target="_blank" rel="noopener noreferrer"
-                           className="text-xs px-2 py-1 rounded-lg font-medium bg-gray-100 text-gray-600 flex items-center gap-0.5"
-                           onClick={e=>e.stopPropagation()}>
-                          🔗 네이버
-                        </a>
-                      )}
-                      <button onClick={e=>{e.stopPropagation();handleVisitToggle(h);}}
-                              className={`text-xs px-2 py-1 rounded-lg font-semibold ${h.visited==='Y'?'bg-emerald-50 text-emerald-600':'bg-gray-50 text-gray-400'}`}>
-                        {h.visited==='Y'?'✅ 임장완료':'⬜ 임장예정'}
-                      </button>
-                      <button onClick={e=>{e.stopPropagation();setReviewTarget(h);setReviewText(h.visitReview||'');}}
-                              className="text-xs px-2 py-1 rounded-lg bg-indigo-50 text-indigo-400 font-semibold">
-                        {h.visitReview ? '후기 수정' : '+ 후기'}
-                      </button>
-                    </div>
-                    {h.visitReview && <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-2.5 py-1.5 mt-1.5 italic">"{h.visitReview}"</p>}
-                  </div>
-                </div>
-              );
-            })}
+            {list.map((h,i)=>(
+              <HousingCard key={i} h={h}
+                onLongPress={()=>setEditItem(h)}
+                onVisitToggle={handleVisitToggle}
+                onReviewClick={h=>{setReviewTarget(h);setReviewText(h.visitReview||'');}}
+              />
+            ))}
           </div>
       }
       <p className="text-center text-xs text-gray-300 mt-3 mb-1">길게 누르면 편집</p>
@@ -1216,6 +1228,40 @@ function PlannerForm({ onSave, onCancel }) {
   );
 }
 
+function VendorCard({ item, isPlanner, onLongPress }) {
+  const lp = useLongPress(onLongPress);
+  const urlInfos = isPlanner ? parseUrls(item.url||'') : parseUrls(item.homepage||'');
+  return (
+    <div {...lp} className="bg-white rounded-2xl shadow-sm select-none active:opacity-70">
+      <div className="px-4 py-3">
+        <div className="flex items-start justify-between gap-2 mb-1">
+          <p className="font-bold text-gray-800 text-sm leading-tight flex-1">{item.name}</p>
+          {!isPlanner && item.price>0 && <p className="font-black text-rose-500 text-sm flex-shrink-0">{fmt(item.price)}원</p>}
+          {isPlanner && item.price && <p className="font-semibold text-rose-500 text-sm flex-shrink-0">{item.price}</p>}
+        </div>
+        {(isPlanner ? item.company : item.memo) && (
+          <p className="text-xs text-gray-400 truncate mb-1.5">{isPlanner ? item.company : item.memo}</p>
+        )}
+        {!isPlanner && item.package && (
+          <p className="text-xs text-gray-600 bg-gray-50 rounded-xl px-3 py-2 mb-2 whitespace-pre-line line-clamp-3">{item.package}</p>
+        )}
+        {isPlanner && item.memo && <p className="text-xs text-gray-400 mb-1.5 italic truncate">{item.memo}</p>}
+        {urlInfos.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {urlInfos.map((ui,j)=>(
+              <a key={j} href={ui.url} target="_blank" rel="noopener noreferrer"
+                 className={`text-xs px-2 py-0.5 rounded-lg font-medium ${URL_COLOR[ui.color]}`}
+                 onClick={e=>e.stopPropagation()}>
+                {ui.icon} {ui.name}
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function VendorPage({ vendors, planners, onAddVendor, onAddPlanner, onDeletePlanner, onEditVendor, onDeleteVendor, onEditPlanner, onReload }) {
   const [vendorTypes, setVendorTypes] = useState(() => {
     try { return JSON.parse(localStorage.getItem('vendorTypes')) || DEFAULT_VENDOR_TYPES; } catch { return DEFAULT_VENDOR_TYPES; }
@@ -1277,47 +1323,11 @@ function VendorPage({ vendors, planners, onAddVendor, onAddPlanner, onDeletePlan
 
       {/* 리스트 */}
       {list.length===0
-        ? <Card><p className="text-center text-gray-400 text-sm py-8">링크를 붙여넣어 업체를 추가해보세요! {emoji}</p></Card>
+        ? <Card><p className="text-center text-gray-400 text-sm py-8">{isPlanner ? '플래너를 추가해보세요! 🗓️' : '링크를 붙여넣어 업체를 추가해보세요! ' + emoji}</p></Card>
         : <div className="space-y-2">
-            {list.map((item,i)=>{
-              const lp = useLongPress(()=>setEditItem(item));
-              const urlInfos = isPlanner
-                ? parseUrls(item.url||'')
-                : parseUrls(item.homepage||'');
-              return (
-                <div key={i} {...lp} className="bg-white rounded-2xl shadow-sm select-none active:opacity-70">
-                  <div className="px-4 py-3">
-                    {/* 업체명 / 가격 — 가장 중요 */}
-                    <div className="flex items-start justify-between gap-2 mb-1">
-                      <p className="font-bold text-gray-800 text-sm leading-tight flex-1">{item.name}</p>
-                      {!isPlanner && item.price>0 && <p className="font-black text-rose-500 text-sm flex-shrink-0">{fmt(item.price)}원</p>}
-                      {isPlanner && item.price && <p className="font-semibold text-rose-500 text-sm flex-shrink-0">{item.price}</p>}
-                    </div>
-                    {/* 메모 — 서브타이틀 위치 */}
-                    {(isPlanner ? item.company : item.memo) && (
-                      <p className="text-xs text-gray-400 truncate mb-1.5">{isPlanner ? item.company : item.memo}</p>
-                    )}
-                    {/* 패키지 구성 — 중요 정보 */}
-                    {!isPlanner && item.package && (
-                      <p className="text-xs text-gray-600 bg-gray-50 rounded-xl px-3 py-2 mb-2 whitespace-pre-line line-clamp-3">{item.package}</p>
-                    )}
-                    {isPlanner && item.memo && <p className="text-xs text-gray-400 mb-1.5 italic truncate">{item.memo}</p>}
-                    {/* URL 버튼들 — 작고 눈에 덜 띄게 */}
-                    {urlInfos.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {urlInfos.map((ui,j)=>(
-                          <a key={j} href={ui.url} target="_blank" rel="noopener noreferrer"
-                             className={`text-xs px-2 py-0.5 rounded-lg font-medium ${URL_COLOR[ui.color]}`}
-                             onClick={e=>e.stopPropagation()}>
-                            {ui.icon} {ui.name}
-                          </a>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+            {list.map((item,i)=>(
+              <VendorCard key={i} item={item} isPlanner={isPlanner} onLongPress={()=>setEditItem(item)} />
+            ))}
           </div>
       }
       <p className="text-center text-xs text-gray-300 mt-3 mb-1">길게 누르면 편집</p>
