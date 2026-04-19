@@ -1037,27 +1037,51 @@ function WeddingPage({ todos }) {
 // ══════════════════════════════════════════════════════════════
 // PAGE: 업체
 // ══════════════════════════════════════════════════════════════
-function VendorEditModal({ item, isPlanner, onSave, onDelete, onClose }) {
+function VendorEditModal({ item, isPlanner, gsKey, onSave, onDelete, onClose }) {
+  const isSnap = gsKey === '📸 본식스냅';
+  function parsePkg(s) { try { return JSON.parse(s||'{}'); } catch { return {}; } }
+  const pkg0 = isSnap ? parsePkg(item.package) : {};
+
   const initUrls = isPlanner
     ? (item.url ? item.url.split('|||').filter(Boolean) : [''])
-    : (item.homepage ? parseUrls(item.homepage).map(u=>u.url||'') : ['']);
+    : (item.homepage ? item.homepage.split('|||').filter(Boolean) : ['']);
   const [urls, setUrls]       = useState(initUrls.length ? initUrls : ['']);
   const [name, setName]       = useState(item.name||'');
-  const [pkg, setPkg]         = useState(item.package||'');
   const [price, setPrice]     = useState(String(item.price||''));
   const [company, setCompany] = useState(item.company||'');
   const [memo, setMemo]       = useState(item.memo||'');
   const [saving, setSaving]   = useState(false);
 
+  const initPhotos = isSnap && item.portfolio ? item.portfolio.split('|||').filter(Boolean) : [''];
+  const [photos, setPhotos]   = useState(initPhotos.length ? initPhotos : ['']);
+  const [staff, setStaff]     = useState(pkg0.staff||'');
+  const [albums, setAlbums]   = useState(pkg0.albums?.length ? pkg0.albums : ['']);
+  const [frame, setFrame]     = useState(pkg0.frame||'');
+  const [edited, setEdited]   = useState(pkg0.edited||'');
+  const [originals, setOriginals] = useState(pkg0.originals||'');
+  const [pkg, setPkg]         = useState((!isSnap && !isPlanner) ? (item.package||'') : '');
+
   function setUrl(i,v) { setUrls(u=>u.map((x,j)=>j===i?v:x)); }
   function addUrl()     { setUrls(u=>[...u,'']); }
   function removeUrl(i) { setUrls(u=>u.filter((_,j)=>j!==i)); }
+  function setPhoto(i,v) { setPhotos(p=>p.map((x,j)=>j===i?v:x)); }
+  function addPhoto()     { setPhotos(p=>[...p,'']); }
+  function removePhoto(i) { setPhotos(p=>p.filter((_,j)=>j!==i)); }
+  function setAlbum(i,v) { setAlbums(a=>a.map((x,j)=>j===i?v:x)); }
+  function addAlbum()     { setAlbums(a=>[...a,'']); }
+  function removeAlbum(i) { setAlbums(a=>a.filter((_,j)=>j!==i)); }
 
   async function handleSave() {
     setSaving(true);
     const urlStr = urls.filter(Boolean).join('|||');
-    if (isPlanner) await onSave({ ...item, name, company, url:urlStr, price, memo });
-    else await onSave({ ...item, name, package:pkg, price:Number(price)||0, homepage:urlStr, memo });
+    if (isPlanner) {
+      await onSave({ ...item, name, company, url:urlStr, price, memo:'' });
+    } else if (isSnap) {
+      const pkgObj = { staff, albums:albums.filter(Boolean), frame, edited, originals };
+      await onSave({ ...item, name, homepage:urlStr, price:Number(price)||0, package:JSON.stringify(pkgObj), portfolio:photos.filter(Boolean).join('|||'), memo });
+    } else {
+      await onSave({ ...item, name, package:pkg, price:Number(price)||0, homepage:urlStr, memo });
+    }
     setSaving(false); onClose();
   }
 
@@ -1065,38 +1089,80 @@ function VendorEditModal({ item, isPlanner, onSave, onDelete, onClose }) {
     <BottomModal onClose={onClose}>
       <div className="px-5 pb-6">
         <div className="flex items-center justify-between mb-4">
-          <p className="font-bold text-gray-800">{isPlanner?'플래너':'업체'} 편집</p>
+          <p className="font-bold text-gray-800">{isPlanner?'플래너':isSnap?'본식스냅':'업체'} 편집</p>
           <button onClick={onClose} className="text-gray-400 text-lg leading-none">✕</button>
         </div>
         <div className="space-y-2.5">
-          <div><label className="text-xs text-gray-500 mb-1 block">이름</label>
-            <input value={name} onChange={e=>setName(e.target.value)} className={inp}/>
-          </div>
-          {isPlanner && <div><label className="text-xs text-gray-500 mb-1 block">소속 업체</label>
-            <input value={company} onChange={e=>setCompany(e.target.value)} className={inp}/>
-          </div>}
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">링크</label>
+            <label className="text-xs text-gray-500 mb-1 block">{isPlanner?'인스타 링크':'링크'}</label>
             {urls.map((u,i)=>(
               <div key={i} className="flex gap-1.5 mb-1.5">
                 <input value={u} onChange={e=>setUrl(i,e.target.value)} placeholder="https://..." className={inp+' flex-1'}/>
                 {urls.length>1 && <button onClick={()=>removeUrl(i)} className="text-gray-300 px-2 text-lg">✕</button>}
               </div>
             ))}
-            <button onClick={addUrl} className="text-xs text-indigo-400 font-semibold">+ 링크 추가</button>
+            {!isPlanner && <button onClick={addUrl} className="text-xs text-indigo-400 font-semibold">+ 링크 추가</button>}
           </div>
-          {!isPlanner && <div><label className="text-xs text-gray-500 mb-1 block">패키지 구성</label>
+          {isSnap && (
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">📷 사진 링크 (구글 드라이브 등)</label>
+              {photos.map((p,i)=>(
+                <div key={i} className="flex gap-1.5 mb-1.5">
+                  <input value={p} onChange={e=>setPhoto(i,e.target.value)} placeholder="https://drive.google.com/..." className={inp+' flex-1'}/>
+                  {photos.length>1 && <button onClick={()=>removePhoto(i)} className="text-gray-300 px-2 text-lg">✕</button>}
+                </div>
+              ))}
+              <button onClick={addPhoto} className="text-xs text-indigo-400 font-semibold">+ 사진 링크 추가</button>
+            </div>
+          )}
+          <div className={isPlanner?'grid grid-cols-2 gap-2':''}>
+            <div><label className="text-xs text-gray-500 mb-1 block">{isPlanner?'이름':'업체명'}</label>
+              <input value={name} onChange={e=>setName(e.target.value)} className={inp}/>
+            </div>
+            {isPlanner && <div><label className="text-xs text-gray-500 mb-1 block">소속</label>
+              <input value={company} onChange={e=>setCompany(e.target.value)} placeholder="베리굿웨딩" className={inp}/>
+            </div>}
+          </div>
+          {isPlanner
+            ? <div><label className="text-xs text-gray-500 mb-1 block">팔로워</label>
+                <input value={price} onChange={e=>setPrice(e.target.value)} placeholder="1.3천 / 9천" className={inp}/>
+              </div>
+            : <div><label className="text-xs text-gray-500 mb-1 block">가격 (원)</label>
+                <NumInput value={price} onChange={setPrice} placeholder="1,500,000" className={inp}/>
+              </div>
+          }
+          {isSnap && <>
+            <div><label className="text-xs text-gray-500 mb-1 block">촬영 인원/직책</label>
+              <input value={staff} onChange={e=>setStaff(e.target.value)} placeholder="대표 1인 / 대표1인+보조1인" className={inp}/>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">앨범 제공</label>
+              {albums.map((a,i)=>(
+                <div key={i} className="flex gap-1.5 mb-1.5">
+                  <input value={a} onChange={e=>setAlbum(i,e.target.value)} placeholder="14*11인치 70p 1권" className={inp+' flex-1'}/>
+                  {albums.length>1 && <button onClick={()=>removeAlbum(i)} className="text-gray-300 px-2 text-lg">✕</button>}
+                </div>
+              ))}
+              <button onClick={addAlbum} className="text-xs text-indigo-400 font-semibold">+ 앨범 추가</button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div><label className="text-xs text-gray-500 mb-1 block">액자 제공</label>
+                <input value={frame} onChange={e=>setFrame(e.target.value)} placeholder="14*11인치 1개" className={inp}/>
+              </div>
+              <div><label className="text-xs text-gray-500 mb-1 block">보정본 장수</label>
+                <input value={edited} onChange={e=>setEdited(e.target.value)} placeholder="70장" className={inp}/>
+              </div>
+            </div>
+            <div><label className="text-xs text-gray-500 mb-1 block">원본 장수+제공방법</label>
+              <input value={originals} onChange={e=>setOriginals(e.target.value)} placeholder="2000장 USB" className={inp}/>
+            </div>
+          </>}
+          {!isSnap && !isPlanner && <div><label className="text-xs text-gray-500 mb-1 block">패키지 구성</label>
             <textarea rows={3} value={pkg} onChange={e=>setPkg(e.target.value)} className={inp+' resize-none'}/>
           </div>}
-          <div><label className="text-xs text-gray-500 mb-1 block">가격</label>
-            {isPlanner
-              ? <input value={price} onChange={e=>setPrice(e.target.value)} placeholder="150만원~" className={inp}/>
-              : <NumInput value={price} onChange={setPrice} placeholder="1,500,000" className={inp}/>
-            }
-          </div>
-          <div><label className="text-xs text-gray-500 mb-1 block">메모</label>
+          {!isPlanner && <div><label className="text-xs text-gray-500 mb-1 block">메모</label>
             <input value={memo} onChange={e=>setMemo(e.target.value)} className={inp}/>
-          </div>
+          </div>}
         </div>
         <div className="flex gap-2 mt-4">
           <button onClick={async()=>{if(window.confirm('삭제할까요?')){await onDelete(item);onClose();}}} className="px-4 py-2.5 bg-red-50 text-red-500 rounded-xl text-sm font-semibold">삭제</button>
@@ -1108,26 +1174,40 @@ function VendorEditModal({ item, isPlanner, onSave, onDelete, onClose }) {
 }
 
 function VendorForm({ section, listLen, onSave, onCancel }) {
-  const [urls, setUrls]   = useState(['']);
-  const [name, setName]   = useState('');
-  const [pkg, setPkg]     = useState('');
-  const [price, setPrice] = useState('');
-  const [memo, setMemo]   = useState('');
+  const isSnap = section === '📸 본식스냅';
+  const [urls, setUrls]     = useState(['']);
+  const [photos, setPhotos] = useState(['']);
+  const [name, setName]     = useState('');
+  const [price, setPrice]   = useState('');
+  const [memo, setMemo]     = useState('');
+  const [staff, setStaff]   = useState('');
+  const [albums, setAlbums] = useState(['']);
+  const [frame, setFrame]   = useState('');
+  const [edited, setEdited] = useState('');
+  const [originals, setOriginals] = useState('');
+  const [pkg, setPkg]       = useState('');
   const [saving, setSaving] = useState(false);
 
-  function setUrl(i,v) {
-    const updated = urls.map((x,j)=>j===i?v:x);
-    setUrls(updated);
-    if (!name && v) { const p=parseUrl(v); if(p&&p.name&&p.name!==v)setName(p.name); }
-  }
+  function setUrl(i,v) { const u=urls.map((x,j)=>j===i?v:x); setUrls(u); if(!name&&v){const p=parseUrl(v);if(p&&p.name&&p.name!==v)setName(p.name);} }
   function addUrl()     { setUrls(u=>[...u,'']); }
   function removeUrl(i) { setUrls(u=>u.filter((_,j)=>j!==i)); }
+  function setPhoto(i,v) { setPhotos(p=>p.map((x,j)=>j===i?v:x)); }
+  function addPhoto()     { setPhotos(p=>[...p,'']); }
+  function removePhoto(i) { setPhotos(p=>p.filter((_,j)=>j!==i)); }
+  function setAlbum(i,v) { setAlbums(a=>a.map((x,j)=>j===i?v:x)); }
+  function addAlbum()     { setAlbums(a=>[...a,'']); }
+  function removeAlbum(i) { setAlbums(a=>a.filter((_,j)=>j!==i)); }
 
   async function handleSave() {
     setSaving(true);
     const urlStr = urls.filter(Boolean).join('|||');
-    const firstParsed = parseUrl(urls.find(Boolean)||'');
-    await onSave({ section, num:listLen+1, name:name||urls.find(Boolean)||'', source:firstParsed?.source||'기타', homepage:urlStr, package:pkg, price:Number(price)||0, memo });
+    if (isSnap) {
+      const pkgObj = { staff, albums:albums.filter(Boolean), frame, edited, originals };
+      await onSave({ section, num:listLen+1, name, source:'인스타', homepage:urlStr, price:Number(price)||0, package:JSON.stringify(pkgObj), portfolio:photos.filter(Boolean).join('|||'), memo });
+    } else {
+      const firstParsed = parseUrl(urls.find(Boolean)||'');
+      await onSave({ section, num:listLen+1, name:name||urls.find(Boolean)||'', source:firstParsed?.source||'기타', homepage:urlStr, package:pkg, price:Number(price)||0, memo });
+    }
     setSaving(false);
   }
 
@@ -1142,21 +1222,61 @@ function VendorForm({ section, listLen, onSave, onCancel }) {
               {urls.length>1 && <button onClick={()=>removeUrl(i)} className="text-gray-300 px-2 text-xl leading-none">✕</button>}
             </div>
           ))}
-          <button onClick={addUrl} className="text-xs text-rose-400 font-semibold">+ 링크 추가 (인스타/블로그/홈페이지)</button>
+          <button onClick={addUrl} className="text-xs text-rose-400 font-semibold">+ 링크 추가</button>
         </div>
-        <div><label className="text-xs text-gray-500 mb-1 block">업체명</label>
+        {isSnap && (
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">📷 사진 링크 (상품 캡쳐 등)</label>
+            {photos.map((p,i)=>(
+              <div key={i} className="flex gap-1.5 mb-1.5">
+                <input value={p} onChange={e=>setPhoto(i,e.target.value)} placeholder="https://drive.google.com/..." className={inp+' flex-1'}/>
+                {photos.length>1 && <button onClick={()=>removePhoto(i)} className="text-gray-300 px-2 text-xl leading-none">✕</button>}
+              </div>
+            ))}
+            <button onClick={addPhoto} className="text-xs text-rose-400 font-semibold">+ 사진 링크 추가</button>
+          </div>
+        )}
+        <div><label className="text-xs text-gray-500 mb-1 block">업체명 *</label>
           <input placeholder="업체명" value={name} onChange={e=>setName(e.target.value)} className={inp}/>
         </div>
-        <div><label className="text-xs text-gray-500 mb-1 block">패키지 구성</label>
-          <textarea rows={3} placeholder={"1인 촬영, 앨범 포함\n사진 300장 이상\n영상 별도"} value={pkg} onChange={e=>setPkg(e.target.value)} className={inp+' resize-none'}/>
+        <div><label className="text-xs text-gray-500 mb-1 block">가격 (원)</label>
+          <NumInput value={price} onChange={setPrice} placeholder="1,500,000" className={inp}/>
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <div><label className="text-xs text-gray-500 mb-1 block">가격 (원)</label>
-            <NumInput value={price} onChange={setPrice} placeholder="1,500,000" className={inp}/>
+        {isSnap ? (
+          <div className="space-y-2.5">
+            <p className="text-xs font-bold text-gray-500 pt-1 border-t border-gray-100">📦 상품 구성</p>
+            <div><label className="text-xs text-gray-500 mb-1 block">촬영 인원/직책</label>
+              <input value={staff} onChange={e=>setStaff(e.target.value)} placeholder="대표 1인 / 대표1인+보조1인" className={inp}/>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">앨범 제공</label>
+              {albums.map((a,i)=>(
+                <div key={i} className="flex gap-1.5 mb-1.5">
+                  <input value={a} onChange={e=>setAlbum(i,e.target.value)} placeholder="14*11인치 70p 1권" className={inp+' flex-1'}/>
+                  {albums.length>1 && <button onClick={()=>removeAlbum(i)} className="text-gray-300 px-2 text-xl leading-none">✕</button>}
+                </div>
+              ))}
+              <button onClick={addAlbum} className="text-xs text-rose-400 font-semibold">+ 앨범 추가</button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div><label className="text-xs text-gray-500 mb-1 block">액자 제공</label>
+                <input value={frame} onChange={e=>setFrame(e.target.value)} placeholder="14*11인치 1개" className={inp}/>
+              </div>
+              <div><label className="text-xs text-gray-500 mb-1 block">보정본 장수</label>
+                <input value={edited} onChange={e=>setEdited(e.target.value)} placeholder="70장" className={inp}/>
+              </div>
+            </div>
+            <div><label className="text-xs text-gray-500 mb-1 block">원본 장수+제공방법</label>
+              <input value={originals} onChange={e=>setOriginals(e.target.value)} placeholder="2000장 USB" className={inp}/>
+            </div>
           </div>
-          <div><label className="text-xs text-gray-500 mb-1 block">메모</label>
-            <input placeholder="소개해준 분 등" value={memo} onChange={e=>setMemo(e.target.value)} className={inp}/>
+        ) : (
+          <div><label className="text-xs text-gray-500 mb-1 block">패키지 구성</label>
+            <textarea rows={3} placeholder={"1인 촬영, 앨범 포함\n사진 300장 이상"} value={pkg} onChange={e=>setPkg(e.target.value)} className={inp+' resize-none'}/>
           </div>
+        )}
+        <div><label className="text-xs text-gray-500 mb-1 block">메모</label>
+          <input placeholder="소개해준 분 등" value={memo} onChange={e=>setMemo(e.target.value)} className={inp}/>
         </div>
         <div className="flex gap-2">
           <button onClick={onCancel} className="flex-1 border border-gray-200 rounded-xl py-2.5 text-gray-500 text-sm font-semibold">취소</button>
@@ -1168,24 +1288,17 @@ function VendorForm({ section, listLen, onSave, onCancel }) {
 }
 
 function PlannerForm({ onSave, onCancel }) {
-  const [urls, setUrls]       = useState(['']);
-  const [name, setName]       = useState('');
-  const [company, setCompany] = useState('');
-  const [price, setPrice]     = useState('');
-  const [memo, setMemo]       = useState('');
-  const [saving, setSaving]   = useState(false);
+  const [url, setUrl]             = useState('');
+  const [name, setName]           = useState('');
+  const [company, setCompany]     = useState('');
+  const [followers, setFollowers] = useState('');
+  const [saving, setSaving]       = useState(false);
 
-  function setUrl(i,v) {
-    const updated = urls.map((x,j)=>j===i?v:x);
-    setUrls(updated);
-    if (!name && v) { const p=parseUrl(v); if(p&&p.name&&p.name!==v)setName(p.name); }
-  }
-  function addUrl()     { setUrls(u=>[...u,'']); }
-  function removeUrl(i) { setUrls(u=>u.filter((_,j)=>j!==i)); }
+  function handleUrl(v) { setUrl(v); if(!name&&v){const p=parseUrl(v);if(p&&p.name&&p.name!==v)setName(p.name);} }
 
   async function handleSave() {
     setSaving(true);
-    await onSave({ date:today(), name:name||urls.find(Boolean)||'', company, url:urls.filter(Boolean).join('|||'), price, memo });
+    await onSave({ date:today(), name, company, url, price:followers, memo:'' });
     setSaving(false);
   }
 
@@ -1193,31 +1306,19 @@ function PlannerForm({ onSave, onCancel }) {
     <Card className="mb-4 border border-rose-100">
       <p className="font-bold text-gray-800 mb-3">🗓️ 플래너 추가</p>
       <div className="space-y-2.5">
-        <div>
-          <label className="text-xs text-gray-500 mb-1 block">링크 *</label>
-          {urls.map((u,i)=>(
-            <div key={i} className="flex gap-1.5 mb-1.5">
-              <input value={u} onChange={e=>setUrl(i,e.target.value)} placeholder="https://instagram.com/planner" className={inp+' flex-1'}/>
-              {urls.length>1 && <button onClick={()=>removeUrl(i)} className="text-gray-300 px-2 text-xl leading-none">✕</button>}
-            </div>
-          ))}
-          <button onClick={addUrl} className="text-xs text-rose-400 font-semibold">+ 링크 추가</button>
+        <div><label className="text-xs text-gray-500 mb-1 block">인스타 링크 *</label>
+          <input value={url} onChange={e=>handleUrl(e.target.value)} placeholder="https://instagram.com/planner" className={inp}/>
         </div>
         <div className="grid grid-cols-2 gap-2">
-          <div><label className="text-xs text-gray-500 mb-1 block">이름/인스타ID</label>
-            <input placeholder="@planner" value={name} onChange={e=>setName(e.target.value)} className={inp}/>
+          <div><label className="text-xs text-gray-500 mb-1 block">이름</label>
+            <input placeholder="이름/인스타ID" value={name} onChange={e=>setName(e.target.value)} className={inp}/>
           </div>
-          <div><label className="text-xs text-gray-500 mb-1 block">소속 업체</label>
+          <div><label className="text-xs text-gray-500 mb-1 block">소속</label>
             <input placeholder="베리굿웨딩" value={company} onChange={e=>setCompany(e.target.value)} className={inp}/>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <div><label className="text-xs text-gray-500 mb-1 block">가격 메모</label>
-            <input placeholder="150만원~" value={price} onChange={e=>setPrice(e.target.value)} className={inp}/>
-          </div>
-          <div><label className="text-xs text-gray-500 mb-1 block">메모</label>
-            <input placeholder="소개해준 분" value={memo} onChange={e=>setMemo(e.target.value)} className={inp}/>
-          </div>
+        <div><label className="text-xs text-gray-500 mb-1 block">팔로워</label>
+          <input placeholder="1.3천 / 9천" value={followers} onChange={e=>setFollowers(e.target.value)} className={inp}/>
         </div>
         <div className="flex gap-2">
           <button onClick={onCancel} className="flex-1 border border-gray-200 rounded-xl py-2.5 text-gray-500 text-sm font-semibold">취소</button>
@@ -1228,32 +1329,90 @@ function PlannerForm({ onSave, onCancel }) {
   );
 }
 
-function VendorCard({ item, isPlanner, onLongPress }) {
+function PlannerCard({ item, onLongPress }) {
   const lp = useLongPress(onLongPress);
-  const urlInfos = isPlanner ? parseUrls(item.url||'') : parseUrls(item.homepage||'');
+  const instaUrl = item.url ? item.url.split('|||')[0].trim() : null;
+  return (
+    <div {...lp} className="bg-white rounded-xl shadow-sm select-none active:opacity-70 flex items-center px-4 py-3 gap-3">
+      <div className="w-9 h-9 bg-gradient-to-br from-pink-400 to-purple-500 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+        {item.name?.[0]||'?'}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="font-semibold text-gray-800 text-sm leading-tight">{item.name}</p>
+        {item.company && <p className="text-xs text-gray-400">{item.company}</p>}
+      </div>
+      {item.price && <p className="text-xs text-gray-400 flex-shrink-0">{item.price}</p>}
+      {instaUrl && (
+        <a href={instaUrl} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()}
+           className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-pink-50 to-purple-50 border border-pink-100 rounded-full flex items-center justify-center text-sm">📷</a>
+      )}
+    </div>
+  );
+}
+
+function SnapCard({ item, onLongPress }) {
+  const lp = useLongPress(onLongPress);
+  const urlInfos = parseUrls(item.homepage||'');
+  const photoUrls = item.portfolio ? item.portfolio.split('|||').filter(Boolean) : [];
+  let pkg = {};
+  try { pkg = JSON.parse(item.package||'{}'); } catch { pkg = {}; }
+  const hasPackage = pkg.staff || (pkg.albums?.filter(Boolean).length>0) || pkg.frame || pkg.edited || pkg.originals;
+  return (
+    <div {...lp} className="bg-white rounded-2xl shadow-sm select-none active:opacity-70">
+      <div className="px-4 py-3">
+        <div className="flex items-start justify-between gap-2 mb-1.5">
+          <p className="font-bold text-gray-800 text-sm flex-1 leading-tight">{item.name}</p>
+          {item.price>0 && <p className="font-black text-rose-500 text-sm flex-shrink-0">{fmt(item.price)}원</p>}
+        </div>
+        {(urlInfos.length>0 || photoUrls.length>0) && (
+          <div className="flex flex-wrap gap-1 mb-2">
+            {urlInfos.map((ui,j)=>(
+              <a key={j} href={ui.url} target="_blank" rel="noopener noreferrer"
+                 className={`text-xs px-2 py-0.5 rounded-lg font-medium ${URL_COLOR[ui.color]}`}
+                 onClick={e=>e.stopPropagation()}>{ui.icon} {ui.name}</a>
+            ))}
+            {photoUrls.map((p,j)=>(
+              <a key={'p'+j} href={p} target="_blank" rel="noopener noreferrer"
+                 className="text-xs px-2 py-0.5 rounded-lg font-medium bg-amber-50 text-amber-600"
+                 onClick={e=>e.stopPropagation()}>📷 사진 {j+1}</a>
+            ))}
+          </div>
+        )}
+        {hasPackage && (
+          <div className="bg-gray-50 rounded-xl px-3 py-2 space-y-0.5">
+            {pkg.staff && <p className="text-xs text-gray-600">👤 {pkg.staff}</p>}
+            {pkg.albums?.filter(Boolean).map((a,j)=><p key={j} className="text-xs text-gray-600">📔 {a}</p>)}
+            {pkg.frame && <p className="text-xs text-gray-600">🖼 {pkg.frame}</p>}
+            {pkg.edited && <p className="text-xs text-gray-600">✏️ 보정본 {pkg.edited}</p>}
+            {pkg.originals && <p className="text-xs text-gray-600">💾 원본 {pkg.originals}</p>}
+          </div>
+        )}
+        {item.memo && <p className="text-xs text-gray-400 mt-1.5 truncate">{item.memo}</p>}
+      </div>
+    </div>
+  );
+}
+
+function VendorCard({ item, isPlanner, gsKey, onLongPress }) {
+  if (isPlanner) return <PlannerCard item={item} onLongPress={onLongPress} />;
+  if (gsKey === '📸 본식스냅') return <SnapCard item={item} onLongPress={onLongPress} />;
+  const lp = useLongPress(onLongPress);
+  const urlInfos = parseUrls(item.homepage||'');
   return (
     <div {...lp} className="bg-white rounded-2xl shadow-sm select-none active:opacity-70">
       <div className="px-4 py-3">
         <div className="flex items-start justify-between gap-2 mb-1">
           <p className="font-bold text-gray-800 text-sm leading-tight flex-1">{item.name}</p>
-          {!isPlanner && item.price>0 && <p className="font-black text-rose-500 text-sm flex-shrink-0">{fmt(item.price)}원</p>}
-          {isPlanner && item.price && <p className="font-semibold text-rose-500 text-sm flex-shrink-0">{item.price}</p>}
+          {item.price>0 && <p className="font-black text-rose-500 text-sm flex-shrink-0">{fmt(item.price)}원</p>}
         </div>
-        {(isPlanner ? item.company : item.memo) && (
-          <p className="text-xs text-gray-400 truncate mb-1.5">{isPlanner ? item.company : item.memo}</p>
-        )}
-        {!isPlanner && item.package && (
-          <p className="text-xs text-gray-600 bg-gray-50 rounded-xl px-3 py-2 mb-2 whitespace-pre-line line-clamp-3">{item.package}</p>
-        )}
-        {isPlanner && item.memo && <p className="text-xs text-gray-400 mb-1.5 italic truncate">{item.memo}</p>}
+        {item.memo && <p className="text-xs text-gray-400 truncate mb-1.5">{item.memo}</p>}
+        {item.package && <p className="text-xs text-gray-600 bg-gray-50 rounded-xl px-3 py-2 mb-2 whitespace-pre-line line-clamp-3">{item.package}</p>}
         {urlInfos.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {urlInfos.map((ui,j)=>(
               <a key={j} href={ui.url} target="_blank" rel="noopener noreferrer"
                  className={`text-xs px-2 py-0.5 rounded-lg font-medium ${URL_COLOR[ui.color]}`}
-                 onClick={e=>e.stopPropagation()}>
-                {ui.icon} {ui.name}
-              </a>
+                 onClick={e=>e.stopPropagation()}>{ui.icon} {ui.name}</a>
             ))}
           </div>
         )}
@@ -1276,9 +1435,14 @@ function VendorPage({ vendors, planners, onAddVendor, onAddPlanner, onDeletePlan
   function addType() { if (!newType.trim()||vendorTypes.includes(newType.trim())) return; saveTypes([...vendorTypes,newType.trim()]); setNewType(''); }
   function removeType(t) { if (!window.confirm(`"${t}" 탭을 삭제할까요?`)) return; const arr=vendorTypes.filter(x=>x!==t); saveTypes(arr); if(tab===t)setTab(arr[0]||''); }
 
+  const [plannerSort, setPlannerSort] = useState('등록순');
+
   const isPlanner = tab==='플래너';
   const gsKey = GS_TAB_MAP[tab];
-  const list = isPlanner ? planners : (gsKey ? (vendors[gsKey]||[]) : []);
+  let list = isPlanner ? planners : (gsKey ? (vendors[gsKey]||[]) : []);
+  if (isPlanner && plannerSort==='소속순') {
+    list = [...list].sort((a,b)=>(a.company||'').localeCompare(b.company||'', 'ko'));
+  }
   const emoji = TAB_EMOJI[tab]||'🏢';
 
   return (
@@ -1311,7 +1475,17 @@ function VendorPage({ vendors, planners, onAddVendor, onAddPlanner, onDeletePlan
       )}
 
       <div className="flex items-center justify-between mb-3 px-1">
-        <p className="font-bold text-gray-700">{emoji} {tab} <span className="text-rose-500">{list.length}개</span></p>
+        <div className="flex items-center gap-2 flex-wrap">
+          <p className="font-bold text-gray-700">{emoji} {tab} <span className="text-rose-500">{list.length}개</span></p>
+          {isPlanner && (
+            <div className="flex gap-1">
+              {['등록순','소속순'].map(s=>(
+                <button key={s} onClick={()=>setPlannerSort(s)}
+                  className={`text-xs px-2 py-0.5 rounded-full font-semibold ${plannerSort===s?'bg-rose-100 text-rose-600':'text-gray-400 bg-gray-100'}`}>{s}</button>
+              ))}
+            </div>
+          )}
+        </div>
         <button onClick={()=>setShowForm(!showForm)} className="bg-rose-500 text-white rounded-xl px-4 py-2 text-sm font-semibold">{showForm?'닫기':'+ 추가'}</button>
       </div>
 
@@ -1326,7 +1500,7 @@ function VendorPage({ vendors, planners, onAddVendor, onAddPlanner, onDeletePlan
         ? <Card><p className="text-center text-gray-400 text-sm py-8">{isPlanner ? '플래너를 추가해보세요! 🗓️' : '링크를 붙여넣어 업체를 추가해보세요! ' + emoji}</p></Card>
         : <div className="space-y-2">
             {list.map((item,i)=>(
-              <VendorCard key={i} item={item} isPlanner={isPlanner} onLongPress={()=>setEditItem(item)} />
+              <VendorCard key={i} item={item} isPlanner={isPlanner} gsKey={gsKey} onLongPress={()=>setEditItem(item)} />
             ))}
           </div>
       }
@@ -1336,6 +1510,7 @@ function VendorPage({ vendors, planners, onAddVendor, onAddPlanner, onDeletePlan
         <VendorEditModal
           item={editItem}
           isPlanner={isPlanner}
+          gsKey={gsKey}
           onSave={async(data)=>{
             if (isPlanner) await onEditPlanner(data);
             else await onEditVendor(data);
